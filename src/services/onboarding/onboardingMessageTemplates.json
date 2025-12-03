@@ -1,0 +1,114 @@
+[
+  {
+    "key": "onboarding_no_company_data",
+    "channel": "email",
+    "language": "taglish",
+    "subject": "Quick step lang — let's set up your business para mas smart si NexScout 💡",
+    "body": "Hi {{name}},\n\nNapansin ko na hindi pa natin nalalagay yung basic info ng business mo.\nSuper bilis lang nito — and ito yung nag-a-unlock ng:\n\n✅ Mas accurate na AI messages  \n✅ Personalized pitch decks  \n✅ Smarter product suggestions  \n✅ Higher chance of closing your first deal  \n\nClick here to finish it (30 seconds lang):  \n👉 {{deep_link}}\n\nTara, let's set you up for your first win.\n– NexScout AI Mentor",
+    "variables": ["name", "deep_link"]
+  },
+  {
+    "key": "onboarding_no_products",
+    "channel": "email",
+    "language": "taglish",
+    "subject": "Add your product — para makabenta ka today 🚀",
+    "body": "Hi {{name}},\n\nReady ka na magbenta — pero wala pa akong alam tungkol sa product mo.\nKonting input lang, and I'll auto-generate:\n\n🔥 Smart product pitches  \n🔥 Follow-up messages  \n🔥 Closing scripts  \n🔥 Marketing angles  \n\nTap here to add your product:  \n👉 {{deep_link}}\n\nLet's close your first sale today.\n– Your NexScout AI Coach",
+    "variables": ["name", "deep_link"]
+  },
+  {
+    "key": "onboarding_no_chatbot",
+    "channel": "email",
+    "language": "taglish",
+    "subject": "Activate your AI Chatbot — 24/7 sales agent mo 📲",
+    "body": "Hi {{name}},\n\nHindi pa naka-ON yung AI Chatbot mo.\nSayang! This feature brings leads + closes deals habang natutulog ka.\n\nOnce activated, it can:\n🤖 Answer questions  \n🤖 Handle objections  \n🤖 Book meetings  \n🤖 Collect prospect info  \n\nActivate it now (10 seconds):  \n👉 {{deep_link}}",
+    "variables": ["name", "deep_link"]
+  },
+  {
+    "key": "onboarding_no_first_win",
+    "channel": "email",
+    "language": "taglish",
+    "subject": "Let's get your first WIN — scan 3 prospects 💪",
+    "body": "Hi {{name}},\n\nGusto mo bang mahanap agad kung sino ang potential buyers mo?\nScan 3 prospects and I'll show you:\n\n🎯 Buying Intent  \n🎯 Personality Type  \n🎯 Objections  \n🎯 Best message to send\n\nClick here to scan:  \n👉 {{deep_link}}\n\nKaya natin 'to 🔥",
+    "variables": ["name", "deep_link"]
+  },
+  {
+    "key": "onboarding_user_confused",
+    "channel": "email",
+    "language": "taglish",
+    "subject": "Let me help you — mabilis lang. 🙂",
+    "body": "Hi {{name}},\n\nMukhang nalito ka kanina, and that's totally normal.\nI'm here to guide you step-by-step.\n\nJust click this and I'll walk you through everything:  \n👉 {{deep_link}}\n\n– Your NexScout AI Mentor",
+    "variables": ["name", "deep_link"]
+  },
+  {
+    "key": "onboarding_stuck",
+    "channel": "email",
+    "language": "taglish",
+    "subject": "You're so close — konti na lang para kumita ka na 💰",
+    "body": "Hi {{name}},\n\nNapansin ko na napahinto ka. No worries!\nLet's finish your setup — para makapag-close ka na ng first sale mo.\n\nClick to resume:  \n👉 {{deep_link}}\n\nI'll walk with you.\n– NexScout AI Mentor",
+    "variables": ["name", "deep_link"]
+  },
+  {
+    "key": "onboarding_free_high_usage",
+    "channel": "email",
+    "language": "taglish",
+    "subject": "You're leveling up fast — unlock full power 🚀",
+    "body": "Hi {{name}},\n\nGrabe — ang dami mong ginagawa inside NexScout!\nKung i-unlock mo yung Pro, mas mapapabilis natin yung closing:\n\n✨ Unlimited scanning  \n✨ Unlimited AI messages  \n✨ Full DeepScan  \n✨ Auto follow-ups  \n✨ Smart appointment setting\n\nTry Pro now:  \n👉 {{upgrade_link}}",
+    "variables": ["name", "upgrade_link"]
+  },
+  {
+    "key": "push_onboarding_stuck",
+    "channel": "push",
+    "language": "taglish",
+    "title": "Balik tayo?",
+    "body": "Kaya mo 'to. Tap to resume your setup 💪",
+    "variables": []
+  },
+  {
+    "key": "push_onboarding_no_company_data",
+    "channel": "push",
+    "language": "taglish",
+    "title": "Quick step lang ✨",
+    "body": "Add your business info para mas smart yung AI mo.",
+    "variables": []
+  },
+  {
+    "key": "push_onboarding_no_products",
+    "channel": "push",
+    "language": "taglish",
+    "title": "Add your product 🔥",
+    "body": "Para ma-generate ko na ang sales messages mo.",
+    "variables": []
+  },
+  {
+    "key": "push_onboarding_no_chatbot",
+    "channel": "push",
+    "language": "taglish",
+    "title": "Activate AI Chatbot 🤖",
+    "body": "Turn on your 24/7 sales agent — 10 seconds lang.",
+    "variables": []
+  },
+  {
+    "key": "push_onboarding_no_first_scan",
+    "channel": "push",
+    "language": "taglish",
+    "title": "Let's scan 3 prospects 🎯",
+    "body": "Para makita agad kung sino ang bibili.",
+    "variables": []
+  },
+  {
+    "key": "push_onboarding_confused",
+    "channel": "push",
+    "language": "taglish",
+    "title": "Nalito ka kanina?",
+    "body": "I'll guide you. Tap to continue.",
+    "variables": []
+  },
+  {
+    "key": "push_free_high_usage",
+    "channel": "push",
+    "language": "taglish",
+    "title": "Ang galing mo! 🔥",
+    "body": "Unlock Pro para bumilis lalo progress mo.",
+    "variables": []
+  }
+]

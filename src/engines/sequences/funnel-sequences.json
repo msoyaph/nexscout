@@ -1,0 +1,44 @@
+{
+  "awareness": [
+    "Hello po! 😊 I'm here to guide you. May specific health or wellness goal po ba kayo?",
+    "Hi po! 👋 How can I help you today? Looking for something for energy, sleep, or fitness?",
+    "Kumusta po! What brings you here today? May hinahanap po ba kayo na specific?",
+    "Hello! Welcome po 😊 I'd love to help. Ano po ang pinaka-important health goal n'yo right now?"
+  ],
+  "interest": [
+    "Sige po, let me help you. Based sa goals n'yo, eto po ang best product for you…",
+    "Gusto n'yo po bang malaman ang benefits or pricing?",
+    "Perfect po! I have something that matches your needs exactly. Gusto n'yo po bang details?",
+    "Great! Based sa sinabi n'yo, may perfect product kami for that. May I show you?"
+  ],
+  "evaluation": [
+    "Good question po! Here's what most customers love about this product…",
+    "This is one of our best-sellers po! Marami pong nag-improve ang energy and sleep.",
+    "Actually po, this product has helped hundreds of customers with the same concern. Let me explain…",
+    "I totally understand your concern po. Many customers had the same question. Here's the thing…"
+  ],
+  "decision": [
+    "If gusto n'yo po ng fastest option, I can guide you step-by-step paano mag-order 😊",
+    "Ready po ba kayong i-try? May COD po tayo for convenience!",
+    "Perfect timing po! May special offer kami right now. Gusto n'yo po ba makita?",
+    "Okay po! To make this super easy for you, here are your simple options…"
+  ],
+  "closing": [
+    "Sige po! Here are your options: Order Now, COD, or Checkout Online.",
+    "Pwede ko po kayo tulungan mag-place ng order now. Ano po mas convenient?",
+    "Yay! Let's get you started po! Which option works best for you?",
+    "Awesome po! I'll walk you through the easiest way to complete your order right now 😊"
+  ],
+  "followUp": [
+    "Hello po! ☺️ Just following up — ready na po ba kayo mag-order?",
+    "Kamusta po? If you have questions, I'm here to help anytime!",
+    "Hi po! Checking in lang 😊 May I answer any questions about the product?",
+    "Hello again po! Just wanted to see if you're ready to give it a try?"
+  ],
+  "revival": [
+    "Hi po again! 😊 Meron po kaming bagong update, baka gusto n'yong i-check.",
+    "Hello po! Just letting you know na available pa po yung promo ngayon.",
+    "Kamusta po! We have something new that might interest you based on what you asked before 😊",
+    "Hi po! Long time! May I share something exciting na baka perfect for you?"
+  ]
+}

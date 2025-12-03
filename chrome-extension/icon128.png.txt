@@ -1,0 +1,14 @@
+PLACEHOLDER FILE - Replace with actual PNG
+
+This is a placeholder for icon128.png.
+The extension needs a 128x128 PNG icon.
+
+You can:
+1. Convert icon128.svg to PNG using an online converter
+2. Use any 128x128 PNG image as a temporary icon
+3. Create a custom icon for NexScout.ai
+
+For Chrome Web Store, you'll also need:
+- icon16.png (16x16)
+- icon48.png (48x48)
+- icon128.png (128x128)

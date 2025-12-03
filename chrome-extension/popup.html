@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NexScout.ai Capture</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <h1>NexScout.ai</h1>
+      </div>
+      <a href="#" id="settingsLink" class="settings-link">Settings</a>
+    </div>
+
+    <div class="info-section">
+      <div class="info-badge">
+        <span class="info-label">Platform:</span>
+        <span id="platformDisplay" class="info-value">Detecting...</span>
+      </div>
+      <div class="info-badge">
+        <span class="info-label">Suggested:</span>
+        <span id="suggestedType" class="info-value suggested">Loading...</span>
+      </div>
+    </div>
+
+    <form id="captureForm">
+      <div class="form-group">
+        <label for="captureType">Capture Type</label>
+        <select id="captureType" required>
+          <option value="friends_list">Friends List</option>
+          <option value="group_members">Group Members</option>
+          <option value="post">Post with Comments</option>
+          <option value="comments">Comments Only</option>
+          <option value="messages">Messages</option>
+          <option value="profile">Profile</option>
+          <option value="custom">Custom / Other</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="platform">Platform</label>
+        <select id="platform" required>
+          <option value="facebook">Facebook</option>
+          <option value="instagram">Instagram</option>
+          <option value="linkedin">LinkedIn</option>
+          <option value="twitter">Twitter / X</option>
+          <option value="tiktok">TikTok</option>
+          <option value="unknown">Other</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Tags (Select all that apply)</label>
+        <div class="tags-grid">
+          <label class="tag-checkbox">
+            <input type="checkbox" name="tag" value="warm_market">
+            <span>Warm Market</span>
+          </label>
+          <label class="tag-checkbox">
+            <input type="checkbox" name="tag" value="cold_market">
+            <span>Cold Market</span>
+          </label>
+          <label class="tag-checkbox">
+            <input type="checkbox" name="tag" value="ofw">
+            <span>OFW</span>
+          </label>
+          <label class="tag-checkbox">
+            <input type="checkbox" name="tag" value="insurance_customer">
+            <span>Insurance Customer</span>
+          </label>
+          <label class="tag-checkbox">
+            <input type="checkbox" name="tag" value="business_owner">
+            <span>Business Owner</span>
+          </label>
+          <label class="tag-checkbox">
+            <input type="checkbox" name="tag" value="high_engagement">
+            <span>High Engagement</span>
+          </label>
+          <label class="tag-checkbox">
+            <input type="checkbox" name="tag" value="low_engagement">
+            <span>Low Engagement</span>
+          </label>
+          <label class="tag-checkbox">
+            <input type="checkbox" name="tag" value="financial_stress">
+            <span>Financial Stress</span>
+          </label>
+          <label class="tag-checkbox">
+            <input type="checkbox" name="tag" value="real_estate_buyer">
+            <span>Real Estate Buyer</span>
+          </label>
+          <label class="tag-checkbox">
+            <input type="checkbox" name="tag" value="student">
+            <span>Student</span>
+          </label>
+          <label class="tag-checkbox">
+            <input type="checkbox" name="tag" value="freelancer">
+            <span>Freelancer</span>
+          </label>
+          <label class="tag-checkbox">
+            <input type="checkbox" name="tag" value="other">
+            <span>Other</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="notes">Notes (Optional)</label>
+        <textarea id="notes" rows="3" placeholder="Add any additional context..."></textarea>
+      </div>
+
+      <button type="submit" id="captureBtn" class="capture-btn">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M7 10L12 15L17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Capture & Send to NexScout
+      </button>
+
+      <div id="statusMessage" class="status-message"></div>
+    </form>
+
+    <div class="footer">
+      <p>Powered by <strong>NexScout.ai</strong> v1.0.0</p>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

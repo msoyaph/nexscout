@@ -1,0 +1,230 @@
+{
+  "sequence_id": "onboarding_v1_ethics",
+  "version": "1.0",
+  "name": "Ethical Onboarding Drip v1",
+  "description": "7-day ethical onboarding drip for new users",
+  "ab_group": "A",
+  "days": [
+    {
+      "day": 0,
+      "scenarios": [
+        {
+          "id": "welcome_after_signup",
+          "trigger": "signup_completed",
+          "messages": {
+            "email": {
+              "subject": "Welcome to NexScout! 🚀 Let's set you up in 90 seconds",
+              "body": "Hi {{firstName}}! 👋 Welcome to NexScout — your new AI Sales Partner.\n\nLet's get you your first win today.\nClick here to start the 90-second QuickStart Wizard.\n\n✔ Set up your details\n✔ Add your products\n✔ Activate your AI Chatbot\n\nI'm here with you every step of the way. 💙",
+              "action_url": "/onboarding"
+            },
+            "push": {
+              "title": "Welcome to NexScout!",
+              "body": "Ready for your first sale? Start the 90-second setup 🚀",
+              "action_url": "/onboarding"
+            },
+            "mentor": {
+              "text": "Hey {{firstName}}! 👋 I'm your AI Coach. Let's set up your profile — mabilis lang 'to."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "day": 1,
+      "scenarios": [
+        {
+          "id": "no_company_data",
+          "trigger": "company_data_missing_4h",
+          "messages": {
+            "push": {
+              "title": "Quick setup lang!",
+              "body": "Add your business info para personalized ang benta natin 💼✨",
+              "action_url": "/onboarding/company-setup"
+            },
+            "mentor": {
+              "text": "Let's add your business details — mabilis lang, promise. Tap 'Set up my business' below."
+            },
+            "email": {
+              "delay_hours": 8,
+              "subject": "Why this step matters ❤️",
+              "body": "Hi {{firstName}}! Adding your business info helps NexScout personalize your AI scripts and sales messages.\nThis step takes under 1 minute — and unlocks better results.\n\nClick here to finish:\n{{deep_link}}",
+              "action_url": "/onboarding/company-setup"
+            }
+          }
+        },
+        {
+          "id": "no_product_added",
+          "trigger": "product_data_missing_12h",
+          "messages": {
+            "push": {
+              "title": "Add your product",
+              "body": "Para makapagbenta ka TODAY, add your product/service. 🚀",
+              "action_url": "/products/add"
+            },
+            "mentor": {
+              "text": "The AI needs at least 1 product to generate sales scripts and closing messages. Tap 'Add my first product' below."
+            },
+            "email": {
+              "delay_hours": 12,
+              "subject": "Add 1 product → Get your first sale",
+              "body": "Good news, {{firstName}}! Once you add one product, the AI can:\n✔ Generate sales scripts\n✔ Create marketing angles\n✔ Close sales\n\nTara, let's add it!\n{{deep_link}}",
+              "action_url": "/products/add"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "day": 2,
+      "scenarios": [
+        {
+          "id": "product_not_completed_day2",
+          "trigger": "product_data_incomplete_24h",
+          "messages": {
+            "email": {
+              "subject": "Users who finish this step get faster sales 🚀",
+              "body": "Most NexScout closers complete their Product setup on Day 2 — this unlocks your AI Sales Scripts, Chatbot Selling, and Pitch Decks.\n\nLet's finish it so we can activate selling!\n{{deep_link}}",
+              "action_url": "/products/add"
+            }
+          }
+        },
+        {
+          "id": "chatbot_not_activated_evening",
+          "trigger": "chatbot_disabled_after_product",
+          "messages": {
+            "push": {
+              "title": "Activate your AI Chatbot 🤖",
+              "body": "Your 24/7 sales agent is ready — turn it on!",
+              "action_url": "/ai-chatbot"
+            },
+            "mentor": {
+              "text": "Your AI Chatbot is one tap away from generating leads for you. Tap 'Turn ON my chatbot' below."
+            },
+            "email": {
+              "delay_hours": 6,
+              "subject": "Turn on your 24/7 Sales Agent",
+              "body": "Your AI Chatbot can:\n✔ Handle inquiries\n✔ Close sales\n✔ Book appointments\n\nIt only takes 1 tap to activate.\n{{deep_link}}",
+              "action_url": "/ai-chatbot"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "day": 3,
+      "scenarios": [
+        {
+          "id": "no_first_scan",
+          "trigger": "no_first_scan_48h",
+          "messages": {
+            "push": {
+              "title": "Let's scan 3 prospects!",
+              "body": "First win time 💪 Scan your first prospects now.",
+              "action_url": "/scan/upload"
+            },
+            "mentor": {
+              "text": "Try scanning 3 prospects — I'll show you how to convert your first lead today! Tap 'Scan my first 3 prospects' below."
+            },
+            "email": {
+              "delay_hours": 8,
+              "subject": "Want me to pick 3 contacts for you?",
+              "body": "If you want, I can help you choose 3 prospects for your first DeepScan.\nJust click here to let the AI choose for you.\n{{deep_link}}",
+              "action_url": "/scan/upload"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "day": 4,
+      "scenarios": [
+        {
+          "id": "stuck_user_recovery",
+          "trigger": "no_activity_48h",
+          "messages": {
+            "push": {
+              "title": "Balik tayo?",
+              "body": "I'll guide you step-by-step. No pressure 🙂",
+              "action_url": "/onboarding/mentor-chat"
+            },
+            "mentor": {
+              "text": "Ano'ng part ang nakalito? Sabihin mo lang, tutulungan kita. Just tap 'Help me continue' and I'll walk you through."
+            },
+            "email": {
+              "delay_hours": 6,
+              "subject": "Top 3 reasons users get stuck — and quick fixes",
+              "body": "Most users pause because:\n1. Di alam ano next step\n2. Walang oras\n3. Nalito sa setup\n\nI'll help you fix it in under 5 minutes.\n{{deep_link}}",
+              "action_url": "/onboarding/mentor-chat"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "day": 5,
+      "scenarios": [
+        {
+          "id": "high_usage_free_user_upgrade_nudge",
+          "trigger": "free_user_high_usage",
+          "messages": {
+            "push": {
+              "title": "You're leveling up fast!",
+              "body": "Unlock full Pro features and close more deals 🔥",
+              "action_url": "/subscription"
+            },
+            "mentor": {
+              "text": "You're doing great — you're ready for Pro-level tools. Want to see your projected earnings? Tap 'Show me ROI' below."
+            },
+            "email": {
+              "delay_hours": 4,
+              "subject": "You're close to your first big win!",
+              "body": "Based on your activity, a Pro account will 3–5x your closing power.\nHere's your personalized ROI projection…\n\n{{deep_link}}",
+              "action_url": "/subscription"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "day": 6,
+      "scenarios": [
+        {
+          "id": "partial_progress_user",
+          "trigger": "step_completed_but_next_step_ignored",
+          "messages": {
+            "push": {
+              "title": "Nice progress!",
+              "body": "Let's finish your setup para full power ka na 💙",
+              "action_url": "/onboarding"
+            },
+            "mentor": {
+              "text": "You're doing great! Here's the next step so your AI can start selling for you. Tap 'Continue setup' below."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "day": 7,
+      "scenarios": [
+        {
+          "id": "7_day_recovery",
+          "trigger": "onboarding_incomplete_7d",
+          "messages": {
+            "email": {
+              "subject": "Need help? We'll assist you for FREE ❤️",
+              "body": "We noticed you haven't finished setup.\nWant a NexScout specialist or AI assistant to walk you through everything?\nClick here — we'll help you for free.\n{{deep_link}}",
+              "action_url": "/onboarding/mentor-chat"
+            },
+            "push": {
+              "delay_hours": 2,
+              "title": "Free onboarding assistance?",
+              "body": "Tap to get guided help — para makapag-start ka na magbenta ❤️",
+              "action_url": "/onboarding/mentor-chat"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

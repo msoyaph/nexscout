@@ -1,0 +1,806 @@
+# NEXSCOUT CURSOR RULES
+# AI-Powered Sales Intelligence Platform for Filipino Market
+# Tech Stack: Vite + React 18 + TypeScript + Supabase + TailwindCSS + Lucide Icons
+
+You are an expert in TypeScript, React 18, Vite, Supabase, TailwindCSS, and React Router v7.
+
+This is the NexScout application - an AI-powered sales intelligence platform for the Filipino market that helps users scan prospects, generate personalized messages, manage pipelines, and automate sales workflows.
+
+---
+
+## CODE STYLE AND STRUCTURE
+
+- Write concise, technical TypeScript code with accurate examples
+- Use functional and declarative programming patterns; avoid classes except for services
+- Prefer iteration and modularization over code duplication
+- **CRITICAL:** This codebase has 30-40% code duplication. Always check for existing implementations before creating new code
+- Use descriptive variable names with auxiliary verbs (isLoading, hasError, canGenerate)
+- Structure files: exported component, subcomponents, helpers, static content, types
+- **NEVER** create duplicate versions (V1, V2, V3) - update existing or create new with clear purpose
+- **DELETE** .OLD files immediately - use git for version history
+- Keep files focused and under 300 lines where possible
+- Extract complex logic into separate service files
+
+---
+
+## NAMING CONVENTIONS
+
+- Use lowercase with dashes for directories (e.g., `services/ai-engines`, `components/prospect-cards`)
+- Use camelCase for files (e.g., `messagingEngine.ts`, `scoutScore.ts`)
+- Use PascalCase for React components (e.g., `ProspectCard.tsx`, `PipelinePage.tsx`)
+- Favor named exports for components and services
+- Service files: use camelCase with descriptive names (`configService.ts`, `energyService.ts`)
+- **Avoid version suffixes** (V2, V3, V4) - use single canonical version
+- Engine files go in `src/engines/{category}/` (e.g., `src/engines/messaging/`, `src/engines/scoring/`)
+- Edge functions: use kebab-case (e.g., `scan-processor`, `public-chatbot-chat`)
+
+---
+
+## TYPESCRIPT USAGE
+
+- Use TypeScript for all code; prefer interfaces over types for objects
+- Avoid enums; use const objects or `as const` assertions
+- Use functional components with TypeScript interfaces
+- Define clear types for Supabase queries and responses
+- Use generic types for reusable services and engines
+- Always type Supabase RLS policies and edge function responses
+- Use `Database` type from `@/types/database.ts` for Supabase tables
+- Avoid `any` type; use `unknown` if type is truly dynamic
+
+Example:
+```typescript
+interface ProspectCardProps {
+  prospect: Prospect;
+  onSelect: (id: string) => void;
+  isSelected?: boolean;
+}
+
+export function ProspectCard({ prospect, onSelect, isSelected = false }: ProspectCardProps) {
+  // Component implementation
+}
+```
+
+---
+
+## REACT BEST PRACTICES
+
+- Use functional components with hooks
+- Minimize `useEffect` usage; prefer data fetching in services
+- Use React Router v7 for navigation with type-safe route params
+- Implement error boundaries for graceful error handling
+- Use `React.lazy()` for code splitting (critical: 1.8MB bundle detected)
+- Wrap lazy components in Suspense with loading fallbacks
+- Use `React.memo()` sparingly - only for expensive re-renders
+- Avoid inline function definitions in JSX - extract to component level
+- Use custom hooks for complex state logic
+
+Example:
+```typescript
+// Lazy load heavy components
+const DeepScanPage = React.lazy(() => import('@/pages/AIDeepScanPage'));
+
+// Use in router
+<Route
+  path="/deep-scan"
+  element={
+    <Suspense fallback={<LoadingSpinner />}>
+      <DeepScanPage />
+    </Suspense>
+  }
+/>
+```
+
+---
+
+## SUPABASE INTEGRATION
+
+**This is the core database. Follow these rules strictly:**
+
+- Use Supabase SDK for all database operations
+- **Always use Row Level Security (RLS)** - do NOT bypass with service role key in client code
+- Use typed Supabase client: `import { supabase } from '@/lib/supabase'`
+- Edge functions for sensitive operations (AI calls, payments, webhooks)
+- Use `auth.uid()` in RLS policies for user isolation
+- Use Supabase Storage for file uploads (with RLS policies)
+- Use Supabase Realtime for live updates (chatbot, notifications)
+- Always handle Supabase errors gracefully
+- Use `.maybeSingle()` instead of `.single()` when expecting 0 or 1 rows
+- Never expose service role key in client code
+
+Example:
+```typescript
+// CORRECT: Safe client-side query with RLS
+const { data: prospects, error } = await supabase
+  .from('prospects')
+  .select('id, name, scout_score, pipeline_stage')
+  .eq('user_id', userId)
+  .order('scout_score', { ascending: false })
+  .limit(50);
+
+if (error) {
+  console.error('Failed to load prospects:', error);
+  throw new Error('Unable to load prospects. Please try again.');
+}
+
+// CORRECT: Use maybeSingle for 0 or 1 rows
+const { data: config, error } = await supabase
+  .from('company_intelligence')
+  .select('*')
+  .eq('user_id', userId)
+  .maybeSingle();
+```
+
+---
+
+## STATE MANAGEMENT
+
+**The app has 14 separate contexts causing performance issues. Follow these rules:**
+
+- Use React Context ONLY for authentication and global user state
+- **Recommended:** Implement Zustand for complex state (see audit recommendation)
+- Avoid props drilling beyond 2 levels - use composition or state management
+- Use URL state for filters and pagination (react-router search params)
+- Never store sensitive data (API keys, tokens) in client state
+- Cache Supabase queries where appropriate (5-minute TTL)
+- Use SWR or React Query pattern for data fetching (or implement similar caching)
+
+Example of URL state:
+```typescript
+const [searchParams, setSearchParams] = useSearchParams();
+const stage = searchParams.get('stage') || 'all';
+
+const handleStageChange = (newStage: string) => {
+  setSearchParams({ stage: newStage });
+};
+```
+
+---
+
+## AI ENGINE ARCHITECTURE
+
+**CRITICAL: This is the #1 issue. 60+ AI engines with massive duplication.**
+
+### Centralized AI Orchestrator Pattern
+
+- **ALL AI calls MUST go through a centralized AIOrchestrator service**
+- **NEVER call OpenAI directly** from components or individual engines
+- Structure: `Component → Service → AIOrchestrator → OpenAI`
+- Use consistent prompt templates stored in database (`ai_system_instructions` table)
+- Always track energy costs for AI operations
+- Implement fallback logic (GPT-4 → GPT-3.5-turbo if low energy)
+- Log all AI generations to `ai_generations` table
+- Use streaming responses for better UX where applicable
+
+### AIOrchestrator Pattern
+
+```typescript
+// CORRECT: Use AIOrchestrator
+import { aiOrchestrator } from '@/services/ai/orchestrator';
+
+const response = await aiOrchestrator.generate({
+  userId: user.id,
+  type: 'message',
+  systemPrompt: buildSystemPrompt(config),
+  userPrompt: buildUserPrompt(prospect),
+  model: 'gpt-4',
+  temperature: 0.7,
+  energyCost: 10
+});
+
+// WRONG: Direct OpenAI call
+import OpenAI from 'openai';
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const response = await openai.chat.completions.create({ ... });
+```
+
+### AI Engine Guidelines
+
+- Each engine should focus on ONE specific task
+- Engines should be pure functions where possible
+- Store prompts in database, not hardcoded
+- Version prompts using `ai_system_instructions.version` field
+- Test engines with mocked AI responses
+- Document energy costs clearly
+
+---
+
+## CONFIGURATION MANAGEMENT
+
+**CRITICAL: Config is loaded in 40+ places. This causes inconsistencies.**
+
+### Centralized ConfigService Pattern
+
+- **ALL config loading MUST use ConfigService singleton**
+- **NEVER load** `company_intelligence`, `chatbot_settings` directly from components
+- Config is cached for 5 minutes - invalidate on updates
+- Structure: `Component → ConfigService.load(userId) → Cached Config`
+
+```typescript
+// CORRECT: Use ConfigService
+import { configService } from '@/services/config';
+
+const config = await configService.load(userId);
+const companyName = config.company.company_name;
+const products = config.products;
+
+// WRONG: Direct database query
+const { data: config } = await supabase
+  .from('company_intelligence')
+  .select('*')
+  .eq('user_id', userId)
+  .single();
+```
+
+### Config Structure
+
+```typescript
+interface UserConfig {
+  company: CompanyIntelligence;
+  chatbot: ChatbotSettings;
+  products: ProductIntelligence[];
+  custom: CustomInstructions[];
+  prompts: AISystemInstructions[];
+}
+
+// ConfigService methods
+await configService.load(userId): Promise<UserConfig>
+await configService.get(userId, 'company'): Promise<CompanyIntelligence>
+await configService.update(userId, 'chatbot', data): Promise<void>
+configService.invalidate(userId): void
+```
+
+---
+
+## DATABASE PATTERNS
+
+- Use service layer for all database operations
+- Service files in `src/services/{domain}/` (e.g., `src/services/prospects/prospectService.ts`)
+- **Always use RLS policies** - NEVER bypass with admin key in client
+- Use transactions for multi-table operations
+- Optimize queries: select only needed columns, use proper indexes
+- Handle database errors with user-friendly messages
+- Use Zod for data validation before database insert/update
+- Batch operations where possible (bulk insert, bulk update)
+
+Example Service Pattern:
+```typescript
+// src/services/prospects/prospectService.ts
+export class ProspectService {
+  async create(userId: string, data: CreateProspectDTO): Promise<Prospect> {
+    // 1. Validate input
+    const validated = prospectSchema.parse(data);
+
+    // 2. Check energy
+    const hasEnergy = await energyService.checkAndDeduct(userId, 5);
+    if (!hasEnergy) throw new Error('Insufficient energy');
+
+    // 3. Insert to database
+    const { data: prospect, error } = await supabase
+      .from('prospects')
+      .insert({ ...validated, user_id: userId })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return prospect;
+  }
+
+  async list(userId: string, filters?: ProspectFilters): Promise<Prospect[]> {
+    let query = supabase
+      .from('prospects')
+      .select('id, name, scout_score, pipeline_stage')
+      .eq('user_id', userId);
+
+    if (filters?.stage) {
+      query = query.eq('pipeline_stage', filters.stage);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    return data || [];
+  }
+}
+
+export const prospectService = new ProspectService();
+```
+
+---
+
+## PERFORMANCE OPTIMIZATION
+
+**Current issues: 1.8MB bundle, no code splitting, 14 contexts causing re-renders**
+
+- Implement lazy loading for routes and heavy components
+- Use `React.memo()` for expensive components that re-render frequently
+- Optimize images: use proper sizes, lazy load, compress
+- Minimize bundle size: code split, tree shake unused imports
+- Use virtualization for long lists (>100 items) - `@tanstack/react-virtual`
+- Debounce search and filter inputs (300ms)
+- Cache expensive calculations (ScoutScore, personality analysis)
+- Optimize RLS policies: cache `auth.uid()` in functions
+- Use Supabase's `.explain()` to analyze slow queries
+- Implement pagination (not infinite scroll) for large datasets
+
+Example Virtualization:
+```typescript
+import { useVirtualizer } from '@tanstack/react-virtual';
+
+function ProspectList({ prospects }: { prospects: Prospect[] }) {
+  const parentRef = useRef<HTMLDivElement>(null);
+
+  const virtualizer = useVirtualizer({
+    count: prospects.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 80, // Row height
+  });
+
+  return (
+    <div ref={parentRef} style={{ height: '600px', overflow: 'auto' }}>
+      <div style={{ height: `${virtualizer.getTotalSize()}px` }}>
+        {virtualizer.getVirtualItems().map((virtualRow) => (
+          <ProspectCard
+            key={virtualRow.key}
+            prospect={prospects[virtualRow.index]}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              transform: `translateY(${virtualRow.start}px)`,
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+## SECURITY PRACTICES
+
+**The app has excellent RLS (500+ policies). Maintain this standard.**
+
+- **NEVER expose Supabase service role key** in client code
+- **NEVER store OpenAI API keys** in client code
+- Use edge functions for sensitive operations (AI calls, webhooks, payments)
+- Validate all user inputs (use Zod schemas)
+- Sanitize data before AI prompts (prevent prompt injection)
+- Use RLS policies on ALL tables (no exceptions)
+- Implement rate limiting on edge functions
+- Use webhook signature verification (Facebook, Stripe)
+- Encrypt sensitive config (FB access tokens, API keys) - use Supabase Vault
+- Never log sensitive data (tokens, passwords, API keys)
+- Use HTTPS for all external API calls
+- Validate file uploads (type, size, content)
+
+Example Input Validation:
+```typescript
+import { z } from 'zod';
+
+const createProspectSchema = z.object({
+  name: z.string().min(1).max(100),
+  email: z.string().email().optional(),
+  phone: z.string().regex(/^\+?[1-9]\d{1,14}$/).optional(),
+  notes: z.string().max(1000).optional(),
+});
+
+// Use in service
+const validated = createProspectSchema.parse(input);
+```
+
+---
+
+## FILIPINO MARKET CONSIDERATIONS
+
+**This app targets Filipino users - unique requirements:**
+
+- Support Taglish (mixed Tagalog/English) in AI responses
+- Use PHP currency formatting (₱) as primary, USD as secondary
+- Detect language from user input (English vs Tagalog vs Taglish)
+- Support Filipino pain points vocabulary:
+  - "extra income", "side hustle", "kailangan ng pera"
+  - "pagod sa 9-5", "gusto mag-business"
+  - "walang capital", "takot mag-risk"
+- Use Filipino-friendly UI copy (casual, warm, encouraging tone)
+- Support local payment methods (GCash, PayMaya) - future
+- Optimize for 3G/4G mobile connections (common in PH)
+- Consider data costs - minimize unnecessary API calls
+- Use Filipino time zones (Asia/Manila)
+- Support mobile-first design (most users on mobile)
+
+Example Language Detection:
+```typescript
+function detectLanguage(text: string): 'en' | 'tl' | 'taglish' {
+  const tagalogWords = ['ako', 'ka', 'ang', 'ng', 'sa', 'para', 'gusto', 'kailangan'];
+  const tagalogCount = tagalogWords.filter(word =>
+    text.toLowerCase().includes(word)
+  ).length;
+
+  const hasEnglish = /[a-zA-Z]/.test(text);
+  const hasTagalog = tagalogCount > 0;
+
+  if (hasEnglish && hasTagalog) return 'taglish';
+  if (hasTagalog) return 'tl';
+  return 'en';
+}
+```
+
+---
+
+## ERROR HANDLING AND MONITORING
+
+**Currently no monitoring - critical gap.**
+
+- Implement error boundaries around major features
+- Use try-catch in all async operations
+- Provide user-friendly error messages (avoid technical jargon)
+- **Plan:** Integrate Sentry for error tracking
+- Track AI failures separately (prompt issues, rate limits, token errors)
+- Never expose sensitive data in error messages
+- Implement fallback UI for failed components
+- Log errors to Supabase table for admin visibility
+- Show loading states for all async operations
+- Handle network errors gracefully (offline support)
+
+Example Error Boundary:
+```typescript
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('Error caught by boundary:', error, errorInfo);
+    // Send to monitoring service (Sentry)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 text-center">
+          <h2 className="text-xl font-bold mb-4">Something went wrong</h2>
+          <p>We're working on fixing this. Please try refreshing the page.</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded"
+          >
+            Refresh Page
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+```
+
+---
+
+## TESTING STRATEGY
+
+**Currently 0% test coverage. This is critical technical debt.**
+
+- Write unit tests for all service layer functions (Vitest)
+- Test AI engines with mocked OpenAI responses
+- Test Supabase queries with mocked client
+- E2E tests for critical flows (Playwright):
+  - User signup and onboarding
+  - Scanning prospects (screenshot, CSV)
+  - Generating messages
+  - Pipeline management
+  - Chatbot conversations
+- Test multi-tenancy isolation (config cross-contamination prevention)
+- Test energy system calculations and deductions
+- Test ScoutScore algorithm accuracy
+- Test RLS policies (users cannot access other users' data)
+
+Example Service Test:
+```typescript
+import { describe, it, expect, vi } from 'vitest';
+import { prospectService } from './prospectService';
+
+describe('ProspectService', () => {
+  it('should create prospect with valid data', async () => {
+    const userId = 'user-123';
+    const data = {
+      name: 'Juan Dela Cruz',
+      email: 'juan@example.com',
+      scout_score: 85
+    };
+
+    const prospect = await prospectService.create(userId, data);
+
+    expect(prospect.name).toBe('Juan Dela Cruz');
+    expect(prospect.user_id).toBe(userId);
+  });
+
+  it('should throw error if insufficient energy', async () => {
+    vi.spyOn(energyService, 'checkAndDeduct').mockResolvedValue(false);
+
+    await expect(
+      prospectService.create('user-123', validData)
+    ).rejects.toThrow('Insufficient energy');
+  });
+});
+```
+
+---
+
+## UI/UX PATTERNS
+
+- Use TailwindCSS for all styling (no inline styles)
+- Use Lucide React for icons (already installed)
+- Implement responsive design (mobile-first approach)
+- Use consistent spacing scale (4px, 8px, 16px, 24px, 32px)
+- Use consistent color palette (define in tailwind.config.js)
+- Implement loading skeletons (not just spinners)
+- Use toast notifications for user feedback (success, error, info)
+- Implement empty states for lists (not just blank pages)
+- Use proper form validation with clear error messages
+- Implement keyboard shortcuts for power users
+- Use proper semantic HTML (accessibility)
+
+Example Loading Skeleton:
+```typescript
+function ProspectCardSkeleton() {
+  return (
+    <div className="p-4 border rounded-lg animate-pulse">
+      <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+      <div className="h-3 bg-gray-200 rounded w-1/2 mb-4"></div>
+      <div className="flex gap-2">
+        <div className="h-6 bg-gray-200 rounded w-16"></div>
+        <div className="h-6 bg-gray-200 rounded w-20"></div>
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+## EDGE FUNCTIONS BEST PRACTICES
+
+- Use TypeScript for all edge functions
+- Always validate inputs (use Zod)
+- Always handle CORS properly
+- Use environment variables for secrets (never hardcode)
+- Implement proper error handling (don't expose stack traces)
+- Use service role key only in edge functions (never in client)
+- Log important events for debugging
+- Keep functions focused (single responsibility)
+- Use retry logic for external API calls
+- Implement rate limiting to prevent abuse
+- Return consistent response format (success/error structure)
+
+Example Edge Function Structure:
+```typescript
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from '@supabase/supabase-js';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    // 1. Validate input
+    const { userId, prospectId } = await req.json();
+    if (!userId || !prospectId) {
+      throw new Error('Missing required parameters');
+    }
+
+    // 2. Initialize Supabase client (with service role)
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    );
+
+    // 3. Perform operation
+    const result = await processProspect(supabase, userId, prospectId);
+
+    // 4. Return success response
+    return new Response(
+      JSON.stringify({ success: true, data: result }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
+      }
+    );
+  } catch (error) {
+    console.error('Edge function error:', error);
+
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: error.message
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400
+      }
+    );
+  }
+});
+```
+
+---
+
+## DOCUMENTATION REQUIREMENTS
+
+- Document all AI engines: purpose, inputs, outputs, energy cost
+- Document all edge functions: endpoint, auth, parameters, response format
+- Document config schema and validation rules
+- Use JSDoc for complex functions and services
+- Maintain Architecture Decision Records (ADRs) for major changes
+- Document API contracts between frontend and edge functions
+- Keep README.md updated with setup instructions
+- Document environment variables needed
+- Create user guides for complex features
+
+Example JSDoc:
+```typescript
+/**
+ * Calculate ScoutScore V5 for a prospect
+ *
+ * @param prospect - Prospect data with all enrichment fields
+ * @returns ScoutScore result with score (0-100), breakdown, and recommendations
+ *
+ * @example
+ * const result = calculateScoutScoreV5({
+ *   name: 'Juan Dela Cruz',
+ *   painPoints: ['needs extra income', 'tired of 9-5'],
+ *   buyingSignals: { explicitInterest: 0.8 },
+ *   demographics: { age: 28, location: 'Manila' }
+ * });
+ *
+ * console.log(result.score); // 85
+ * console.log(result.temperature); // 'hot'
+ */
+export function calculateScoutScoreV5(prospect: ProspectData): ScoutScoreResult {
+  // Implementation
+}
+```
+
+---
+
+## GOVERNMENT SYSTEM GUIDELINES
+
+**Status: 30% complete with broken imports (see audit Section 10)**
+
+**Decision Required:** Complete or Remove
+
+### If Completing:
+- Fix all broken imports in `src/government/enginesRegistry.ts`
+- Implement missing `run()` methods in all engines
+- Complete department implementations
+- Add integration tests
+- Document the orchestration system
+
+### If Removing:
+- Delete `src/government/` directory entirely
+- Remove imports from any files that reference it
+- Update routing if government pages exist
+- Remove from documentation
+
+**DO NOT leave in half-complete state** - Choose one path and execute fully.
+
+---
+
+## CODE REVIEW CHECKLIST
+
+**Before committing code, verify:**
+
+- [ ] No duplicate code (checked for existing implementations)
+- [ ] No .OLD or version suffix files created
+- [ ] TypeScript strict mode passes (`npm run typecheck`)
+- [ ] Uses ConfigService for config loading (not direct DB queries)
+- [ ] Uses AIOrchestrator for AI calls (not direct OpenAI)
+- [ ] Service layer for database operations (not direct in components)
+- [ ] Error handling implemented (try-catch, error boundaries)
+- [ ] RLS policies maintained (no service role key in client)
+- [ ] No hardcoded API keys or secrets
+- [ ] Performance optimized (lazy loading if large component)
+- [ ] User-friendly error messages (no technical jargon)
+- [ ] Loading states implemented (skeletons or spinners)
+- [ ] Mobile responsive (tested at 375px, 768px, 1024px)
+- [ ] Accessibility considered (semantic HTML, ARIA labels)
+- [ ] Filipino market considerations applied (Taglish support, PHP currency)
+
+---
+
+## TECHNICAL DEBT PRIORITIES
+
+**From audit: ~336 hours of technical debt**
+
+### P0 - Critical (Complete First)
+1. **AI Engine Consolidation** - Build AIOrchestrator, consolidate 60+ engines
+2. **Delete Dead Code** - Remove all .OLD files, V1/V2/V3 duplicates
+3. **Config Centralization** - Build ConfigService, update 40+ loading points
+4. **ScoutScore Unification** - Use V5 only, remove V1-V4
+5. **Energy System Unification** - Use V5 only, remove V1-V4
+
+### P1 - High Priority (After P0)
+1. **State Management** - Add Zustand, reduce 14 contexts
+2. **Service Layer** - Abstract all API calls into services
+3. **Database Cleanup** - Consolidate 358 migrations to 50-100
+4. **Error Boundaries** - Add to all major features
+5. **Monitoring** - Integrate Sentry
+
+### P2 - Medium Priority
+1. **Government System** - Complete or remove
+2. **Code Splitting** - Implement lazy loading
+3. **RLS Optimization** - Cache auth functions
+4. **E2E Tests** - Playwright test suite
+5. **Documentation** - ADRs and API docs
+
+---
+
+## KEY ARCHITECTURAL PATTERNS
+
+### 1. Service Pattern
+```
+Component → Service → Supabase/EdgeFunction
+```
+
+### 2. AI Pattern
+```
+Component → Service → AIOrchestrator → OpenAI
+```
+
+### 3. Config Pattern
+```
+Component → ConfigService → Cache → Supabase
+```
+
+### 4. Error Pattern
+```
+ErrorBoundary → Component → try/catch → User-friendly message
+```
+
+---
+
+## COMMON PITFALLS TO AVOID
+
+1. **Don't** create multiple versions (V1, V2, V3) - refactor the original
+2. **Don't** load config directly in components - use ConfigService
+3. **Don't** call OpenAI directly - use AIOrchestrator
+4. **Don't** bypass RLS - always use proper authentication
+5. **Don't** create duplicate code - check for existing implementations
+6. **Don't** create .OLD files - use git for history
+7. **Don't** mix business logic in UI components - use services
+8. **Don't** hardcode API keys - use environment variables
+9. **Don't** ignore error handling - always handle failures gracefully
+10. **Don't** skip loading states - users need feedback
+
+---
+
+## CONCLUSION
+
+These rules enforce the architectural patterns needed to:
+- Fix critical issues (AI duplication, config fragmentation)
+- Maintain strengths (TypeScript, RLS, comprehensive features)
+- Prevent regression (no more duplication, no .OLD files)
+- Guide consolidation (AIOrchestrator, ConfigService)
+- Support Filipino market (Taglish, local considerations)
+
+**The goal:** Reduce 336 hours of technical debt while maintaining velocity.
+
+**When in doubt:** Check existing code, use services, prioritize user experience.
