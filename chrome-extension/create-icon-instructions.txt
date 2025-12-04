@@ -1,0 +1,13 @@
+To create icon128.png:
+
+Option 1 - Online Converter:
+1. Go to https://cloudconvert.com/svg-to-png
+2. Upload icon128.svg
+3. Convert to PNG
+4. Download as icon128.png
+
+Option 2 - Using Inkscape (if installed):
+inkscape icon128.svg --export-type=png --export-filename=icon128.png --export-width=128 --export-height=128
+
+Option 3 - Placeholder:
+For now, you can use any 128x128 PNG image as icon128.png

@@ -1,0 +1,124 @@
+{
+  "sequence_id": "onboarding_v2_experimental",
+  "version": "1.0",
+  "name": "Experimental Onboarding v2",
+  "description": "Outcome-focused experimental sequence for A/B testing",
+  "ab_group": "B",
+  "days": [
+    {
+      "day": 0,
+      "scenarios": [
+        {
+          "id": "welcome_focus_result",
+          "trigger": "signup_completed",
+          "messages": {
+            "email": {
+              "subject": "Let's get you 1 new lead today 💬",
+              "body": "Hi {{firstName}},\n\nWelcome to NexScout. Goal natin today: 1 new real prospect.\n\nStep 1 – Add 1 product\nStep 2 – Activate your chatbot\nStep 3 – Share your chatbot link\n\nClick here to start. I'll guide you. 💙",
+              "action_url": "/onboarding"
+            },
+            "push": {
+              "title": "Goal: 1 new lead today",
+              "body": "3 quick steps → first prospect. Let's go 🚀",
+              "action_url": "/onboarding"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "day": 1,
+      "scenarios": [
+        {
+          "id": "no_product_added_v2",
+          "trigger": "product_data_missing_12h",
+          "messages": {
+            "push": {
+              "title": "Kulang na lang: product mo",
+              "body": "Add 1 product para makapagbenta na si chatbot ngayon.",
+              "action_url": "/products/add"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "day": 2,
+      "scenarios": [
+        {
+          "id": "chatbot_not_shared",
+          "trigger": "chatbot_active_but_no_share",
+          "messages": {
+            "email": {
+              "subject": "Share your chatbot → get 1 new inquiry",
+              "body": "Your chatbot is ready, {{firstName}}.\n\nTry this: share your chatbot link to 3 friends or sa Facebook story.\nMost users get their first inquiry after sharing.\n\nClick here to copy your link.",
+              "action_url": "/ai-chatbot"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "day": 3,
+      "scenarios": [
+        {
+          "id": "has_chats_no_deal",
+          "trigger": "chatbot_conversations_no_sale",
+          "messages": {
+            "mentor": {
+              "text": "Nakikita kong may kausap ka na, {{firstName}}. Gusto mo bang turuan kita ng mas aggressive pero respectful closing lines?"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "day": 4,
+      "scenarios": [
+        {
+          "id": "no_first_win_v2",
+          "trigger": "no_first_sale_4d",
+          "messages": {
+            "email": {
+              "subject": "Let's push for your first sale this week 💪",
+              "body": "Kaya natin 'to, {{firstName}}.\n\nI'll suggest a mini campaign for you:\n1) Scan 5 prospects\n2) Send 1 follow-up each\n3) Ask for a 15-minute call\n\nClick here and I'll auto-generate the sequence for you.",
+              "action_url": "/scan/upload"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "day": 5,
+      "scenarios": [
+        {
+          "id": "pro_upgrade_suggestion",
+          "trigger": "free_user_high_usage",
+          "messages": {
+            "push": {
+              "title": "You're using NexScout like a pro 👏",
+              "body": "Unlock full power (unlimited scans, messages, auto-follow-ups).",
+              "action_url": "/subscription"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "day": 6,
+      "scenarios": [
+        {
+          "id": "activation_summary",
+          "trigger": "onboarding_week_summary",
+          "messages": {
+            "email": {
+              "subject": "Here's what you've already achieved 🎉",
+              "body": "Here's your week with NexScout so far:\n• Prospects scanned: {{context.scanned_count}}\n• Conversations started: {{context.conversations_count}}\n• Appointments booked: {{context.appointments_count}}\n\nLet's make next week your first big win. 💙",
+              "action_url": "/prospects"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

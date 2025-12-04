@@ -1,0 +1,127 @@
+{
+  "sequence_id": "first_win_v1",
+  "version": "1.0",
+  "name": "First Win Activation Flow",
+  "description": "7-day laser-focused sequence for first win achievement",
+  "ab_group": null,
+  "days": [
+    {
+      "day": 0,
+      "scenarios": [
+        {
+          "id": "first_win_start",
+          "trigger": "signup_completed",
+          "messages": {
+            "mentor": {
+              "text": "Welcome, {{firstName}}! Target natin: 1 real customer interaction in 24 hours. Ready?"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "day": 1,
+      "scenarios": [
+        {
+          "id": "no_scan_first_win",
+          "trigger": "no_first_scan_24h",
+          "messages": {
+            "push": {
+              "title": "Step 1: Scan 3 prospects",
+              "body": "Pili tayo ng 3 tao na pwedeng maging client mo. Let's scan now. 💪",
+              "action_url": "/scan/upload"
+            }
+          }
+        },
+        {
+          "id": "has_scan_no_chatbot",
+          "trigger": "scan_done_no_chatbot",
+          "messages": {
+            "mentor": {
+              "text": "Nice! Na-scan mo na yung prospects. Next step: Activate natin si chatbot para siya na muna magtrabaho."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "day": 2,
+      "scenarios": [
+        {
+          "id": "chatbot_on_no_share_first_win",
+          "trigger": "chatbot_active_but_no_share_24h",
+          "messages": {
+            "push": {
+              "title": "Share your chatbot link 💬",
+              "body": "Send to 3 friends or sa GC — tingnan natin sino unang magre-reply.",
+              "action_url": "/ai-chatbot"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "day": 3,
+      "scenarios": [
+        {
+          "id": "has_chats_no_offer",
+          "trigger": "chatbot_has_chats_no_offer",
+          "messages": {
+            "mentor": {
+              "text": "May kausap ka na! Gusto mo bigyan kita ng ready-made offer script para di awkward magbenta?"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "day": 4,
+      "scenarios": [
+        {
+          "id": "no_appointment_first_win",
+          "trigger": "no_appointment_4d",
+          "messages": {
+            "email": {
+              "subject": "Let's turn chats into real appointments 📅",
+              "body": "We're almost there, {{firstName}}.\n\nI'll help you send a simple message:\n\"Hi, let's do a quick 10-minute call so I can explain how this can help you.\"\n\nClick here and I'll auto-generate messages for your warmest leads.",
+              "action_url": "/messaging-hub"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "day": 5,
+      "scenarios": [
+        {
+          "id": "appointment_no_sale",
+          "trigger": "appointment_happened_no_sale",
+          "messages": {
+            "mentor": {
+              "text": "Okay lang yan kung walang sale agad. Gusto mo i-review natin yung call at gawa tayo ng better closing script for next time?"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "day": 6,
+      "scenarios": [
+        {
+          "id": "first_win_celebration",
+          "trigger": "first_sale_or_first_appointment",
+          "messages": {
+            "push": {
+              "title": "🎉 FIRST WIN UNLOCKED!",
+              "body": "Congrats, {{firstName}}! Let's repeat this process with 5 more prospects.",
+              "action_url": "/prospects"
+            },
+            "mentor": {
+              "text": "Ang galing! Nakuha na natin ang first win mo. From here, target natin: repeatable system. Ready ka na for Pro-level selling."
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
