@@ -511,7 +511,6 @@ class EnergyEngineV5 {
   private isUserOverBudget(profile: UserPricingProfile, additionalTokens: number): boolean {
     const weeklyLimits: Record<string, number> = {
       free: 10000,
-      pro: 100000,
       pro: 500000, // Elite removed, Pro gets unlimited credits
       enterprise: 10000000
     };
