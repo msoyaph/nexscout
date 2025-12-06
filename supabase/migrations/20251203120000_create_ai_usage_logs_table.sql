@@ -10,7 +10,7 @@
 
 -- Create ai_usage_logs table
 CREATE TABLE IF NOT EXISTS ai_usage_logs (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   
   -- User & workspace context
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,

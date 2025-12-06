@@ -291,11 +291,11 @@ export class AIReminderEngine {
         .eq('id', userId)
         .single();
 
-      if (profile?.subscription_tier === 'pro' || profile?.subscription_tier === 'elite') {
+      if (profile?.subscription_tier === 'pro') {
         channels.push('email');
       }
 
-      if (profile?.subscription_tier === 'elite') {
+      if (profile?.subscription_tier === 'pro') { // Elite removed, Pro gets all features
         channels.push('sms');
       }
 

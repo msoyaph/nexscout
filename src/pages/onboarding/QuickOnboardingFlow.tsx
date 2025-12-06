@@ -9,8 +9,10 @@
 
 import { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
 import QuickSetupWizard, { QuickSetupData } from '../../components/onboarding/QuickSetupWizard';
 import MagicLoadingAnimation from '../../components/onboarding/MagicLoadingAnimation';
+import OnboardingCompletionFlow from '../../components/onboarding/OnboardingCompletionFlow';
 import { processQuickSetup, initializeOnboarding } from '../../services/onboarding/onboardingEngine';
 
 interface QuickOnboardingFlowProps {
@@ -55,7 +57,27 @@ export default function QuickOnboardingFlow({ onComplete, onNavigate }: QuickOnb
     setStage('complete');
   }
 
-  function handleFinalComplete() {
+  async function handleFinalComplete() {
+    console.log('[QuickOnboarding] Completing onboarding...');
+    
+    // Mark onboarding as complete in database
+    if (user) {
+      try {
+        const { error } = await supabase
+          .from('profiles')
+          .update({ onboarding_completed: true })
+          .eq('id', user.id);
+        
+        if (error) {
+          console.error('[QuickOnboarding] Error marking complete:', error);
+        } else {
+          console.log('[QuickOnboarding] ✅ Onboarding marked complete');
+        }
+      } catch (err) {
+        console.error('[QuickOnboarding] Error:', err);
+      }
+    }
+    
     onComplete();
   }
 
@@ -81,12 +103,14 @@ export default function QuickOnboardingFlow({ onComplete, onNavigate }: QuickOnb
     );
   }
 
-  if (stage === 'complete') {
+  if (stage === 'complete' && setupData) {
     return (
-      <WelcomeDashboard
-        setupData={setupData!}
-        result={result}
-        onNavigate={onNavigate}
+      <OnboardingCompletionFlow
+        userId={user.id}
+        userEmail={user.email || ''}
+        companyName={setupData.companyInput}
+        industry={setupData.industry}
+        companyMatch={setupData.companyMatch}
         onComplete={handleFinalComplete}
       />
     );

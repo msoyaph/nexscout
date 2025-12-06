@@ -63,14 +63,7 @@ export const notificationService = {
     try {
       const { data, error } = await supabase
         .from('notifications')
-        .select(`
-          *,
-          prospects:related_prospect_id (
-            id,
-            full_name,
-            profile_image_url
-          )
-        `)
+        .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(limit);
@@ -79,7 +72,7 @@ export const notificationService = {
 
       return {
         success: true,
-        notifications: data as Notification[],
+        notifications: (data || []) as Notification[],
       };
     } catch (error) {
       console.error('Error fetching notifications:', error);

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Search, Sparkles, Home, Users, PlusCircle, TrendingUp, MoreHorizontal, Target, Palette, Play, Lock, Zap, Menu, Database, FileText, Globe, Upload, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Search, Sparkles, Home, Users, PlusCircle, TrendingUp, MoreHorizontal, Target, Palette, Play, Lock, Zap, Menu, Database, FileText, Globe, Upload, MessageSquare, Settings, Save, X, Check, AlertCircle, Power } from 'lucide-react';
 import ActionPopup from '../components/ActionPopup';
 import SlideInMenu from '../components/SlideInMenu';
 import PitchDeckViewer from '../components/PitchDeckViewer';
@@ -72,6 +72,9 @@ export default function AIPitchDeckPage({
   const [coinBalance, setCoinBalance] = useState(0);
   const [showPaywall, setShowPaywall] = useState(false);
   const [error, setError] = useState<string>('');
+  
+  // AI System Instructions state
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -279,7 +282,7 @@ export default function AIPitchDeckPage({
   };
 
   const getUsageStatus = () => {
-    if (subscriptionTier === 'elite') return { text: 'Unlimited decks', color: 'text-yellow-600' };
+    if (subscriptionTier === 'pro') return { text: 'Unlimited decks', color: 'text-yellow-600' };
     if (subscriptionTier === 'pro') return { text: `${weeklyUsed}/5 decks used`, color: weeklyUsed >= 5 ? 'text-red-600' : 'text-blue-600' };
     return { text: `${weeklyUsed}/1 deck used`, color: weeklyUsed >= 1 ? 'text-red-600' : 'text-green-600' };
   };
@@ -306,6 +309,13 @@ export default function AIPitchDeckPage({
             <div className="px-3 py-1.5 bg-yellow-50 border border-yellow-200 rounded-lg">
               <p className="text-xs font-semibold text-yellow-700">{coinBalance} coins</p>
             </div>
+            <button
+              onClick={() => setShowSettings(true)}
+              className="flex items-center justify-center size-11 rounded-xl bg-white backdrop-blur-sm border border-[#E5E7EB] shadow-sm hover:border-purple-500 hover:bg-purple-50 transition-all"
+              title="AI Settings"
+            >
+              <Settings className="size-5 text-purple-600" />
+            </button>
             <button
               onClick={() => setShowLibraryMenu(true)}
               className="flex items-center justify-center size-11 rounded-xl bg-white backdrop-blur-sm border border-[#E5E7EB] shadow-sm hover:bg-slate-50 transition-colors"
@@ -471,7 +481,7 @@ export default function AIPitchDeckPage({
 
                 <button
                   onClick={() => {
-                    if (subscriptionTier === 'elite') {
+                    if (subscriptionTier === 'pro') {
                       setDeckType('elite');
                     } else {
                       setShowPaywall(true);
@@ -483,7 +493,7 @@ export default function AIPitchDeckPage({
                       : 'bg-white border-gray-200 hover:border-gray-300'
                   }`}
                 >
-                  {subscriptionTier !== 'elite' && (
+                  {subscriptionTier !== 'pro' && (
                     <div className="absolute top-3 right-3">
                       <Lock className="w-5 h-5 text-yellow-600" />
                     </div>
@@ -904,6 +914,40 @@ export default function AIPitchDeckPage({
           onNavigate?.('pitch-deck-editor');
         }}
       />
+
+      {/* AI System Instructions Settings Modal - Unified Component */}
+      {showSettings && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold">AI Settings</h2>
+              <button
+                onClick={() => setShowSettings(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-gray-600 mb-6">
+              AI System Instructions feature is being set up. Deploy the database migration first:
+            </p>
+            <div className="bg-gray-900 rounded-lg p-4 mb-4">
+              <code className="text-green-400 text-sm font-mono">
+                supabase db push
+              </code>
+            </div>
+            <p className="text-sm text-gray-500 mb-6">
+              After deploying, this will show the full rich editor with image and file upload capabilities.
+            </p>
+            <button
+              onClick={() => setShowSettings(false)}
+              className="w-full px-4 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700"
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes fade-in {

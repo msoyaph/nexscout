@@ -17,10 +17,8 @@ export default function TierBadge({ tier, size = 'md', showIcon = true, classNam
 
   const getIcon = () => {
     switch (tier) {
-      case SUBSCRIPTION_TIERS.ELITE:
-        return Crown;
       case SUBSCRIPTION_TIERS.PRO:
-        return Zap;
+        return Crown;
       case SUBSCRIPTION_TIERS.TEAM:
         return Users;
       default:
@@ -45,8 +43,7 @@ export default function TierBadge({ tier, size = 'md', showIcon = true, classNam
   const baseClasses = `inline-flex items-center font-bold rounded-full ${sizeClasses[size]}`;
 
   const tierClasses = {
-    [SUBSCRIPTION_TIERS.ELITE]: 'bg-gradient-to-r from-purple-600 to-pink-600 text-white',
-    [SUBSCRIPTION_TIERS.PRO]: 'bg-blue-600 text-white',
+    [SUBSCRIPTION_TIERS.PRO]: 'bg-gradient-to-r from-purple-600 to-pink-600 text-white',
     [SUBSCRIPTION_TIERS.TEAM]: 'bg-green-600 text-white',
     [SUBSCRIPTION_TIERS.FREE]: 'bg-slate-600 text-white'
   };

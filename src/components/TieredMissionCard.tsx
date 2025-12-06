@@ -84,7 +84,7 @@ export default function TieredMissionCard({
                 <span className="text-slate-400">|</span>
                 <span
                   className={`px-2 py-1 rounded ${
-                    tier === 'elite' ? 'bg-blue-100 text-blue-700 font-bold' : 'text-slate-500'
+                    tier === 'pro' ? 'bg-blue-100 text-blue-700 font-bold' : 'text-slate-500'
                   }`}
                 >
                   🔵 +{mission.rewardElite}

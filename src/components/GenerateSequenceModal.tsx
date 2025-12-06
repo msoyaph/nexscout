@@ -27,14 +27,15 @@ export default function GenerateSequenceModal({
   const [error, setError] = useState('');
   const [currentStep, setCurrentStep] = useState(0);
   const [copiedSteps, setCopiedSteps] = useState<Set<number>>(new Set());
+  const [showAISettings, setShowAISettings] = useState(false);
 
   if (!isOpen) return null;
 
-  const isElite = userTier === 'elite';
+  const isPro = userTier === 'pro';
 
   const handleGenerate = async () => {
-    if (!isElite) {
-      setError('Multi-step sequences are only available for Elite subscribers.');
+    if (!isPro) {
+      setError('Multi-step sequences are only available for Pro subscribers.');
       return;
     }
 
@@ -73,7 +74,7 @@ export default function GenerateSequenceModal({
   };
 
   const renderContent = () => {
-    if (!isElite) {
+    if (!isPro) {
       return (
         <div className="p-8 text-center">
           <div className="w-20 h-20 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center mx-auto mb-4">

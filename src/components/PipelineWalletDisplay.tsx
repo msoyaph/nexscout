@@ -79,7 +79,7 @@ export default function PipelineWalletDisplay({ onPurchaseClick }: PipelineWalle
         }`}
       >
         <Zap className={`w-4 h-4 ${isEnergyLow ? 'text-red-500 animate-pulse' : 'text-yellow-500'}`} />
-        <div className="flex flex-col">
+        <div className="flex items-center gap-1 whitespace-nowrap">
           <span className={`text-xs font-bold ${isEnergyLow ? 'text-red-700' : 'text-gray-900'}`}>
             {energy}
           </span>
@@ -106,7 +106,7 @@ export default function PipelineWalletDisplay({ onPurchaseClick }: PipelineWalle
         }`}
       >
         <Coins className={`w-4 h-4 ${isCoinsLow ? 'text-red-500 animate-pulse' : 'text-orange-500'}`} />
-        <div className="flex flex-col">
+        <div className="flex items-center gap-1 whitespace-nowrap">
           <span className={`text-xs font-bold ${isCoinsLow ? 'text-red-700' : 'text-gray-900'}`}>
             {coins}
           </span>

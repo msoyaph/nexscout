@@ -45,8 +45,7 @@ export default function NotificationPreferencesPage({ onBack }: NotificationPref
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const isPro = profile?.subscription_tier === 'pro' || profile?.subscription_tier === 'elite';
-  const isElite = profile?.subscription_tier === 'elite';
+  const isPro = profile?.subscription_tier === 'pro';
 
   useEffect(() => {
     if (user) {
@@ -103,7 +102,7 @@ export default function NotificationPreferencesPage({ onBack }: NotificationPref
       return;
     }
 
-    if (key === 'sms_reminders' && !isElite) {
+    if (key === 'sms_reminders' && !isPro) {
       alert('SMS reminders are available for Elite members only');
       return;
     }
@@ -178,8 +177,8 @@ export default function NotificationPreferencesPage({ onBack }: NotificationPref
               description="Get SMS alerts for urgent items (Elite)"
               checked={preferences.sms_reminders}
               onChange={() => handleToggle('sms_reminders')}
-              locked={!isElite}
-              badge={!isElite ? 'Elite' : undefined}
+              locked={!isPro}
+              badge={!isPro ? 'Pro' : undefined}
             />
           </div>
         </section>

@@ -62,7 +62,7 @@ class EnergyEngineV4 {
     }
 
     // Manual mode selection (Elite users)
-    if (userMode === 'expert' && (tier === 'elite' || tier === 'enterprise')) {
+    if (userMode === 'expert' && (tier === 'pro' || tier === 'enterprise')) {
       return this.selectModel('gpt-4o', 'user_selected_expert_mode');
     }
 
@@ -398,8 +398,8 @@ class EnergyEngineV4 {
         verbosity: 'balanced',
         style: 'professional'
       },
-      elite: {
-        max_length: 3000,
+      pro: {
+        max_length: 3000, // Pro now gets elite-level features
         verbosity: 'detailed',
         style: 'comprehensive'
       },

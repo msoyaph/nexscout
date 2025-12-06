@@ -24,7 +24,8 @@ export default function ScanResultsPage({ onBack, onNavigate, result }: ScanResu
   const currentProspect = visibleProspects[currentIndex];
 
   const isLocked = (index: number) => {
-    if (profile?.subscription_tier === 'elite') return false;
+    // No ads for Pro tier
+    if (profile?.subscription_tier === 'pro') return false;
     if (profile?.subscription_tier === 'pro') return index > 9;
     return index > 1;
   };

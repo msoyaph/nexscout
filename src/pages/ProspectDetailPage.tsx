@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Flame, MessageCircle, FileText, TrendingUp, Sparkles, Lock, Plus, Bell } from 'lucide-react';
+import { ArrowLeft, Flame, MessageCircle, FileText, TrendingUp, Sparkles, Lock, Plus, Bell, MoreHorizontal, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import type { ProspectWithScore } from '../lib/types/scanning';
 import GenerateMessageModal from '../components/GenerateMessageModal';
@@ -7,7 +7,15 @@ import GenerateSequenceModal from '../components/GenerateSequenceModal';
 import GenerateDeckModal from '../components/GenerateDeckModal';
 import ProspectPhotoUpload from '../components/ProspectPhotoUpload';
 import ProspectAvatar from '../components/ProspectAvatar';
+import ProUpgradeModal from '../components/ProUpgradeModal';
+import SetReminderModal from '../components/SetReminderModal';
+import ManageProspectModal from '../components/ManageProspectModal';
 import { supabase } from '../lib/supabase';
+import { useAutomation } from '../hooks/useAutomation';
+import AutomationPreviewModal from '../components/automation/AutomationPreviewModal';
+import AutomationProgressModal from '../components/automation/AutomationProgressModal';
+import SmartRecommendationCard from '../components/automation/SmartRecommendationCard';
+import { AUTOMATION_COSTS } from '../config/automationCosts';
 
 interface ProspectDetailPageProps {
   onBack: () => void;
@@ -17,7 +25,7 @@ interface ProspectDetailPageProps {
 }
 
 export default function ProspectDetailPage({ onBack, onNavigate, prospect: initialProspect, prospectId }: ProspectDetailPageProps) {
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
   const [showMessageModal, setShowMessageModal] = useState(false);
   const [showSequenceModal, setShowSequenceModal] = useState(false);
   const [showDeckModal, setShowDeckModal] = useState(false);
@@ -25,12 +33,55 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
   const [showPhotoUpload, setShowPhotoUpload] = useState(false);
   const [prospect, setProspect] = useState<any>(initialProspect);
   const [loading, setLoading] = useState(!initialProspect && !!prospectId);
+  const [regeneratingScore, setRegeneratingScore] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [upgradeFeature, setUpgradeFeature] = useState<'sequence' | 'deck' | 'deepscan' | 'automation'>('sequence');
+  const [showReminderModal, setShowReminderModal] = useState(false);
+  const [showManageModal, setShowManageModal] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  
+  // Premium automation features
+  const automation = useAutomation(
+    prospectId || initialProspect?.id || '',
+    initialProspect?.full_name || prospect?.full_name || 'Prospect'
+  );
 
   useEffect(() => {
     if (prospectId && !initialProspect) {
       loadProspect();
+    } else if (initialProspect) {
+      // Ensure initialProspect has pipeline_stage
+      setProspect({
+        ...initialProspect,
+        pipeline_stage: initialProspect.pipeline_stage || null
+      });
     }
   }, [prospectId]);
+
+  // Refresh prospect pipeline status when component becomes visible (e.g., navigating back)
+  useEffect(() => {
+    if (prospectId && user && prospect?.id) {
+      const refreshPipelineStatus = async () => {
+        const { data } = await supabase
+          .from('prospects')
+          .select('pipeline_stage')
+          .eq('id', prospectId)
+          .single();
+        
+        if (data) {
+          setProspect((prev: any) => ({
+            ...prev,
+            pipeline_stage: data.pipeline_stage
+          }));
+        }
+      };
+      
+      // Only refresh if we have a prospect loaded
+      if (prospect?.id) {
+        refreshPipelineStatus();
+      }
+    }
+  }, [prospectId, user]);
 
   async function loadProspect() {
     try {
@@ -57,6 +108,7 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
           location: data.location,
           occupation: data.occupation,
           is_unlocked: data.is_unlocked,
+          pipeline_stage: data.pipeline_stage,
           metadata: data.metadata,
           score: {
             scout_score: data.metadata?.scout_score || 50,
@@ -81,6 +133,54 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
       console.error('Error loading prospect:', error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleRegenerateScore() {
+    if (!prospect?.id || regeneratingScore) return;
+    
+    const coinCost = 2;
+    const currentCoins = profile?.coin_balance || 0;
+    
+    if (currentCoins < coinCost) {
+      alert(`❌ Insufficient coins!\n\nYou need ${coinCost} coins but have ${currentCoins}.\n\nBuy more coins or upgrade to Pro for monthly bonuses!`);
+      return;
+    }
+    
+    if (!confirm(`🔄 Regenerate ScoutScore Analysis?\n\nCost: ${coinCost} coins\n\nThis will analyze the latest chat conversation and update the score with fresh AI insights.`)) {
+      return;
+    }
+    
+    setRegeneratingScore(true);
+    try {
+      // Deduct coins
+      const { error: coinError } = await supabase
+        .from('profiles')
+        .update({ coin_balance: currentCoins - coinCost })
+        .eq('id', user?.id);
+      
+      if (coinError) throw coinError;
+      
+      // Regenerate score
+      const { data, error } = await supabase.rpc('regenerate_prospect_scoutscore', {
+        p_prospect_id: prospect.id
+      });
+      
+      if (error) throw error;
+      
+      if (data?.success) {
+        alert(`✅ ScoutScore Updated!\n\nNew Score: ${data.scout_score}/100\nBucket: ${data.bucket.toUpperCase()}\n\n${coinCost} coins deducted.`);
+        await loadProspect();
+      }
+    } catch (error: any) {
+      console.error('Error regenerating score:', error);
+      
+      // Refund coins
+      await supabase.from('profiles').update({ coin_balance: currentCoins }).eq('id', user?.id);
+      
+      alert('❌ Failed to regenerate score.\n\nYour coins have been refunded.');
+    } finally {
+      setRegeneratingScore(false);
     }
   }
 
@@ -112,8 +212,8 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
   }
 
   const canAccessFeature = (feature: 'sequence' | 'deck' | 'deepscan') => {
-    if (feature === 'deepscan') return profile?.subscription_tier === 'elite';
-    return profile?.subscription_tier === 'pro' || profile?.subscription_tier === 'elite';
+    // All Pro features (Elite tier removed)
+    return profile?.subscription_tier === 'pro';
   };
 
   return (
@@ -155,14 +255,73 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
                 )}
               </div>
             </div>
+            
+            {/* 3 Dots Menu */}
+            <div className="relative">
+              <button
+                onClick={() => setShowMenu(!showMenu)}
+                className="flex items-center justify-center size-9 hover:bg-white/20 rounded-xl transition-colors flex-shrink-0"
+              >
+                <MoreHorizontal className="size-5" />
+              </button>
+              
+              {/* Dropdown Menu */}
+              {showMenu && (
+                <>
+                  <div
+                    className="fixed inset-0 z-20"
+                    onClick={() => setShowMenu(false)}
+                  />
+                  <div className="absolute right-0 top-10 z-30 w-48 bg-white rounded-xl shadow-lg border border-gray-200 py-1">
+                    <button
+                      onClick={() => {
+                        setShowManageModal(true);
+                        setShowMenu(false);
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <FileText className="w-4 h-4" />
+                      Manage Prospect
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-2xl mx-auto px-6 py-8 space-y-6">
         <section className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-3xl p-6 border border-blue-100">
+          {/* Header with Regenerate Button */}
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-gray-600 uppercase">ScoutScore</h2>
+            <button
+              onClick={handleRegenerateScore}
+              disabled={regeneratingScore}
+              className="flex items-center gap-2 px-3 py-1.5 bg-white border border-blue-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-all text-xs font-semibold text-blue-600 disabled:opacity-50 shadow-sm"
+              title="Regenerate ScoutScore from latest conversation (2 coins)"
+            >
+              {regeneratingScore ? (
+                <>
+                  <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>Analyzing...</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span>Regenerate</span>
+                  <span className="text-[10px] bg-blue-100 px-1.5 py-0.5 rounded ml-1">2 coins</span>
+                </>
+              )}
+            </button>
+          </div>
           <div className="text-center mb-6">
-            <h2 className="text-sm font-semibold text-gray-600 uppercase mb-2">ScoutScore</h2>
             <div className="relative inline-block">
               <svg className="size-32" viewBox="0 0 100 100">
                 <circle
@@ -214,7 +373,7 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
               Why This Score?
             </h3>
             <div className="space-y-2">
-              {prospect.score?.explanation_tags.map((tag, i) => (
+              {(prospect.score?.explanation_tags || []).map((tag, i) => (
                 <div key={i} className="flex items-start gap-2 text-sm text-gray-700">
                   <div className="size-1.5 rounded-full bg-[#1877F2] mt-2 flex-shrink-0" />
                   <span>{tag}</span>
@@ -262,6 +421,14 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
               ))}
             </div>
           </section>
+        )}
+
+        {/* Smart Recommendation Card - PREMIUM FEATURE */}
+        {automation.recommendation && (
+          <SmartRecommendationCard
+            recommendation={automation.recommendation}
+            onRunAction={automation.runRecommended}
+          />
         )}
 
         {prospect.profile?.pain_points && prospect.profile.pain_points.length > 0 && (
@@ -312,7 +479,7 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
               </div>
               <div className="text-left">
                 <div className="font-bold">Generate Outreach Message</div>
-                <div className="text-xs text-white/80">20 coins</div>
+                <div className="text-xs text-white/80">3 coins</div>
               </div>
             </div>
             <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -325,7 +492,8 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
               if (canAccessFeature('sequence')) {
                 setShowSequenceModal(true);
               } else {
-                onNavigate('pricing');
+                setUpgradeFeature('sequence');
+                setShowUpgradeModal(true);
               }
             }}
             className="w-full flex items-center justify-between p-4 bg-white border-2 border-gray-200 rounded-2xl hover:border-[#1877F2] transition-all relative overflow-hidden"
@@ -333,7 +501,7 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
             {!canAccessFeature('sequence') && (
               <div className="absolute top-2 right-2 px-3 py-1 bg-gradient-to-r from-amber-400 to-amber-600 text-white text-xs font-bold rounded-full flex items-center gap-1">
                 <Lock className="size-3" />
-                Pro/Elite
+                Pro Only
               </div>
             )}
             <div className="flex items-center gap-3">
@@ -342,7 +510,7 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
               </div>
               <div className="text-left">
                 <div className="font-bold text-gray-900">Generate Follow-Up Sequence</div>
-                <div className="text-xs text-gray-600">4-7 message series • 50 coins</div>
+                <div className="text-xs text-gray-600">4-7 message series • 7 coins</div>
               </div>
             </div>
             <svg className="size-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -351,88 +519,72 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
           </button>
 
           <button
-            onClick={() => {
-              if (canAccessFeature('deck')) {
-                setShowDeckModal(true);
-              } else {
-                onNavigate('pricing');
-              }
-            }}
-            className="w-full flex items-center justify-between p-4 bg-white border-2 border-gray-200 rounded-2xl hover:border-[#1877F2] transition-all relative overflow-hidden"
+            disabled
+            className="w-full flex items-center justify-between p-4 bg-white border-2 border-gray-200 rounded-2xl transition-all relative overflow-hidden opacity-75 cursor-not-allowed"
           >
-            {!canAccessFeature('deck') && (
-              <div className="absolute top-2 right-2 px-3 py-1 bg-gradient-to-r from-amber-400 to-amber-600 text-white text-xs font-bold rounded-full flex items-center gap-1">
-                <Lock className="size-3" />
-                Pro/Elite
-              </div>
-            )}
+            <div className="absolute top-2 right-2 px-3 py-1 bg-gradient-to-r from-amber-400 to-amber-600 text-white text-xs font-bold rounded-full flex items-center gap-1 z-10">
+              <Lock className="size-3" />
+              Coming Soon
+            </div>
             <div className="flex items-center gap-3">
               <div className="size-12 rounded-xl bg-gradient-to-br from-blue-50 to-cyan-50 flex items-center justify-center">
                 <FileText className="size-6 text-[#1877F2]" />
               </div>
               <div className="text-left">
                 <div className="font-bold text-gray-900">Generate Pitch Deck</div>
-                <div className="text-xs text-gray-600">6-slide presentation • 75 coins</div>
+                <div className="text-xs text-gray-600">6-slide presentation • 12 coins</div>
               </div>
             </div>
-            <svg className="size-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
+            <Lock className="size-5 text-gray-400" />
           </button>
 
           <button
-            onClick={() => {
-              if (canAccessFeature('deepscan')) {
-                onNavigate('deep-scan', { prospect });
-              } else {
-                onNavigate('pricing');
-              }
-            }}
-            className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-amber-50 to-amber-100 border-2 border-amber-300 rounded-2xl hover:shadow-lg transition-all relative overflow-hidden"
+            disabled
+            className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-amber-50 to-amber-100 border-2 border-amber-300 rounded-2xl transition-all relative overflow-hidden opacity-75 cursor-not-allowed"
           >
-            {!canAccessFeature('deepscan') && (
-              <div className="absolute top-2 right-2 px-3 py-1 bg-gradient-to-r from-purple-500 to-pink-600 text-white text-xs font-bold rounded-full flex items-center gap-1">
-                <Lock className="size-3" />
-                Pro Only
-              </div>
-            )}
+            <div className="absolute top-2 right-2 px-3 py-1 bg-gradient-to-r from-amber-400 to-amber-600 text-white text-xs font-bold rounded-full flex items-center gap-1 z-10">
+              <Lock className="size-3" />
+              Coming Soon
+            </div>
             <div className="flex items-center gap-3">
               <div className="size-12 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center">
                 <Sparkles className="size-6 text-white" />
               </div>
               <div className="text-left">
                 <div className="font-bold text-gray-900">AI DeepScan Analysis</div>
-                <div className="text-xs text-gray-700">Full personality & buying profile</div>
+                <div className="text-xs text-gray-700">Full personality & buying profile • 12 coins</div>
               </div>
             </div>
-            <svg className="size-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
+            <Lock className="size-5 text-gray-700" />
           </button>
         </section>
 
         <section className="space-y-3">
           <h3 className="font-bold text-gray-900">Pipeline Actions</h3>
 
-          <button
-            onClick={() => setShowActionMenu(!showActionMenu)}
-            className="w-full flex items-center justify-between p-4 bg-white border-2 border-gray-200 rounded-2xl hover:border-green-500 transition-all"
-          >
-            <div className="flex items-center gap-3">
-              <div className="size-12 rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 flex items-center justify-center">
-                <Plus className="size-6 text-green-600" />
+          {/* Only show "Add to Pipeline" button if prospect is not already in pipeline */}
+          {!prospect?.pipeline_stage && (
+            <button
+              onClick={() => onNavigate('pipeline', { prospectId: prospect.id })}
+              className="w-full flex items-center justify-between p-4 bg-white border-2 border-gray-200 rounded-2xl hover:border-green-500 transition-all"
+            >
+              <div className="flex items-center gap-3">
+                <div className="size-12 rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 flex items-center justify-center">
+                  <Plus className="size-6 text-green-600" />
+                </div>
+                <div className="text-left">
+                  <div className="font-bold text-gray-900">Add to Pipeline</div>
+                  <div className="text-xs text-gray-600">Move to engagement workflow</div>
+                </div>
               </div>
-              <div className="text-left">
-                <div className="font-bold text-gray-900">Add to Pipeline</div>
-                <div className="text-xs text-gray-600">Move to engagement workflow</div>
-              </div>
-            </div>
-            <svg className="size-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
+              <svg className="size-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          )}
 
           <button
+            onClick={() => setShowReminderModal(true)}
             className="w-full flex items-center justify-between p-4 bg-white border-2 border-gray-200 rounded-2xl hover:border-blue-500 transition-all"
           >
             <div className="flex items-center gap-3">
@@ -450,8 +602,96 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
           </button>
         </section>
 
+        {/* Notes Section at Bottom */}
+        {prospect?.bio_text || prospect?.metadata?.notes ? (
+          <section className="mt-6 p-4 bg-gray-50 rounded-2xl border border-gray-200">
+            <div className="flex items-center gap-2 mb-2">
+              <FileText className="w-4 h-4 text-gray-600" />
+              <h3 className="text-sm font-semibold text-gray-700">Notes</h3>
+            </div>
+            <p className="text-sm text-gray-600 whitespace-pre-wrap">
+              {prospect.bio_text || prospect.metadata?.notes}
+            </p>
+          </section>
+        ) : null}
+
+        {/* Delete Prospect Link */}
+        <div className="mt-6 pb-8 text-center">
+          <button
+            onClick={async () => {
+              if (!confirm('Are you sure you want to delete this prospect? This action cannot be undone.')) {
+                return;
+              }
+              
+              if (!prospect?.id || !user) return;
+              
+              try {
+                const { error } = await supabase
+                  .from('prospects')
+                  .delete()
+                  .eq('id', prospect.id)
+                  .eq('user_id', user.id);
+                
+                if (error) throw error;
+                
+                alert('Prospect deleted successfully');
+                onBack();
+              } catch (error: any) {
+                console.error('Error deleting prospect:', error);
+                alert('Failed to delete prospect. Please try again.');
+              }
+            }}
+            className="text-sm text-red-600 hover:text-red-700 underline font-medium"
+          >
+            Delete Prospect
+          </button>
+        </div>
+
         <div className="h-24" />
       </main>
+
+      {/* Manage Prospect Modal */}
+      {prospect && (
+        <ManageProspectModal
+          isOpen={showManageModal}
+          onClose={() => setShowManageModal(false)}
+          prospectId={prospect.id}
+          prospect={prospect}
+          onProspectUpdated={async () => {
+            if (prospectId) {
+              await loadProspect();
+            } else if (prospect) {
+              // Refresh prospect data
+              const { data } = await supabase
+                .from('prospects')
+                .select('*')
+                .eq('id', prospect.id)
+                .single();
+              
+              if (data) {
+                setProspect({
+                  ...prospect,
+                  ...data,
+                  metadata: data.metadata || {}
+                });
+              }
+            }
+          }}
+        />
+      )}
+
+      {/* Set Reminder Modal */}
+      {prospect && (
+        <SetReminderModal
+          isOpen={showReminderModal}
+          onClose={() => setShowReminderModal(false)}
+          prospectId={prospect.id}
+          prospectName={prospect.full_name}
+          onSuccess={() => {
+            // Optionally show success message or refresh data
+          }}
+        />
+      )}
 
       <GenerateMessageModal
         isOpen={showMessageModal}
@@ -470,7 +710,7 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
         prospectId={prospect.id}
         prospectName={prospect.full_name}
         userId={profile?.id || ''}
-        userTier={(profile?.subscription_tier as 'free' | 'pro' | 'elite') || 'free'}
+        userTier={(profile?.subscription_tier as 'free' | 'pro') || 'free'}
       />
 
       <GenerateDeckModal
@@ -479,7 +719,7 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
         prospectId={prospect.id}
         prospectName={prospect.full_name}
         userId={profile?.id || ''}
-        userTier={(profile?.subscription_tier as 'free' | 'pro' | 'elite') || 'free'}
+        userTier={(profile?.subscription_tier as 'free' | 'pro') || 'free'}
       />
 
       {showPhotoUpload && (
@@ -511,6 +751,38 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
             />
           </div>
         </div>
+      )}
+
+      {/* Premium Automation Modals */}
+      {automation.showPreview && automation.previewData && (
+        <AutomationPreviewModal
+          isOpen={automation.showPreview}
+          action={automation.previewData.action || 'follow_up'}
+          prospectName={prospect?.full_name || 'Prospect'}
+          generatedContent={automation.previewData.content || {}}
+          estimatedOutcome={{
+            replyRate: 0.34,
+            estimatedRevenue: 6800,
+          }}
+          cost={AUTOMATION_COSTS[automation.previewData.action] || AUTOMATION_COSTS.smart_scan}
+          onApprove={automation.previewData.onApprove}
+          onRegenerate={async () => {
+            console.log('Regenerating...');
+          }}
+          onCancel={() => automation.setShowPreview(false)}
+        />
+      )}
+
+      {automation.showProgress && automation.progressData && (
+        <AutomationProgressModal
+          isOpen={automation.showProgress}
+          action="Processing Automation"
+          prospectName={prospect?.full_name || 'Prospect'}
+          steps={automation.progressData.steps}
+          currentStep={automation.progressData.currentStep}
+          estimatedTotal={automation.progressData.estimatedTotal}
+          onCancel={() => automation.setShowProgress(false)}
+        />
       )}
     </div>
   );

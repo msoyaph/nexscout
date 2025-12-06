@@ -463,7 +463,7 @@ export default function ObjectionHandlerPage({
               </div>
             )}
 
-            {result.coachingTip && tier === 'elite' && (
+            {result.coachingTip && tier === 'pro' && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
                 <div className="flex items-start gap-2">
                   <Lightbulb className="w-5 h-5 text-yellow-600 flex-shrink-0" />

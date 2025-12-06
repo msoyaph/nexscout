@@ -231,6 +231,23 @@ CREATE INDEX idx_scoring_history_trigger ON scoring_history(action_trigger);
 -- 4. ENHANCE PROSPECT_SCORES TABLE
 -- =====================================================
 
+-- Ensure UUID extension is enabled
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- SAFETY CHECK: Create prospect_scores table if it doesn't exist
+CREATE TABLE IF NOT EXISTS prospect_scores (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  prospect_id UUID REFERENCES prospects(id) ON DELETE CASCADE NOT NULL,
+  scout_score NUMERIC DEFAULT 50,
+  bucket TEXT DEFAULT 'warm',
+  score NUMERIC DEFAULT 0.5,
+  score_category TEXT DEFAULT 'warm',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, prospect_id)
+);
+
 -- Add v2.0 fields to existing prospect_scores table
 DO $$
 BEGIN
@@ -288,6 +305,22 @@ BEGIN
     WHERE table_name = 'prospect_scores' AND column_name = 'last_recalc_reason'
   ) THEN
     ALTER TABLE prospect_scores ADD COLUMN last_recalc_reason text;
+  END IF;
+
+  -- Explanation tags (for UI display)
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'prospect_scores' AND column_name = 'explanation_tags'
+  ) THEN
+    ALTER TABLE prospect_scores ADD COLUMN explanation_tags jsonb DEFAULT '[]'::jsonb;
+  END IF;
+
+  -- Last calculated timestamp
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'prospect_scores' AND column_name = 'last_calculated_at'
+  ) THEN
+    ALTER TABLE prospect_scores ADD COLUMN last_calculated_at timestamptz DEFAULT NOW();
   END IF;
 END $$;
 

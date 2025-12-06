@@ -12,6 +12,13 @@ export function OperatingModeSelector() {
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
+  // Hide from regular users - only show to SuperAdmin for development
+  const isSuperAdmin = user?.email === 'geoffmax22@gmail.com';
+  
+  if (!isSuperAdmin) {
+    return null;
+  }
+
   useEffect(() => {
     if (profile?.operating_mode) {
       setSelectedMode(profile.operating_mode);

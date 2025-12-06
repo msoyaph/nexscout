@@ -17,18 +17,16 @@ export interface EnergyCost {
 }
 
 const TIER_ENERGY_CAPS: Record<string, number> = {
-  free: 5,
-  pro: 25,
-  elite: 99,
-  team: 150,
+  free: 10, // Increased from 5 - more generous trial
+  pro: 100, // Increased from 99 - truly unlimited feel
+  team: 500, // Increased from 150 - 5 users × 100
   enterprise: 999999
 };
 
 const TIER_DAILY_LIMITS: Record<string, number> = {
-  free: 15,
-  pro: 150,
-  elite: 400,
-  team: 1000,
+  free: 30, // 10 energy × ~3 actions each
+  pro: 1000, // 100 energy × 10 actions (very generous)
+  team: 5000, // Team capacity
   enterprise: 999999
 };
 

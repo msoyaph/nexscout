@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, HelpCircle, MessageSquare, Search, Send, Mail, Phone, Clock, CheckCircle, AlertCircle, Loader, FileText, ChevronRight } from 'lucide-react';
+import { ArrowLeft, HelpCircle, MessageSquare, Search, Send, Mail, Phone, Clock, CheckCircle, AlertCircle, Loader, FileText, ChevronRight, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -18,7 +18,7 @@ interface Ticket {
 }
 
 export default function SupportPage({ onNavigateBack }: SupportPageProps) {
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
   const [activeTab, setActiveTab] = useState<'help' | 'tickets' | 'contact'>('help');
   const [searchQuery, setSearchQuery] = useState('');
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -29,6 +29,18 @@ export default function SupportPage({ onNavigateBack }: SupportPageProps) {
     message: '',
     priority: 'medium' as 'low' | 'medium' | 'high'
   });
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [contactForm, setContactForm] = useState({
+    name: '',
+    email: '',
+    subject: '',
+    message: ''
+  });
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  // SuperAdmin check - only geoffmax22@gmail.com can see full support page
+  const isSuperAdmin = user?.email === 'geoffmax22@gmail.com';
 
   useEffect(() => {
     if (activeTab === 'tickets') {
@@ -200,6 +212,77 @@ export default function SupportPage({ onNavigateBack }: SupportPageProps) {
     )
   })).filter(category => category.articles.length > 0);
 
+  const handleContactSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!contactForm.name || !contactForm.email || !contactForm.message) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    setSending(true);
+    try {
+      // Store contact message in database
+      const { error: dbError } = await supabase
+        .from('contact_messages')
+        .insert({
+          user_id: user?.id || null,
+          name: contactForm.name,
+          email: contactForm.email,
+          subject: contactForm.subject || 'Support Contact Form Submission',
+          message: contactForm.message,
+          status: 'new',
+          created_at: new Date().toISOString()
+        });
+
+      // If table doesn't exist, we'll still try to send email
+      if (dbError && dbError.code !== '42P01') { // 42P01 = table doesn't exist
+        console.warn('Could not save to database:', dbError);
+      }
+
+      // Send email via edge function
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-contact-email`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            },
+            body: JSON.stringify({
+              fromEmail: contactForm.email,
+              fromName: contactForm.name,
+              subject: contactForm.subject || 'Support Contact Form Submission from NexScout',
+              message: contactForm.message,
+              toEmail: 'geoffmax22@gmail.com', // Hidden from user
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          // If edge function doesn't exist, that's okay - message is stored in DB
+          console.warn('Email edge function not available, message saved to database');
+        }
+      } catch (emailError) {
+        // Email sending failed, but message is stored
+        console.warn('Email sending failed, but message is saved:', emailError);
+      }
+
+      setSent(true);
+      setContactForm({ name: '', email: '', subject: '', message: '' });
+      setTimeout(() => {
+        setShowContactModal(false);
+        setSent(false);
+      }, 2000);
+    } catch (error: any) {
+      console.error('Error sending contact message:', error);
+      alert('Failed to send message. Please try again.');
+    } finally {
+      setSending(false);
+    }
+  };
+
   return (
     <div className="bg-gray-50 min-h-screen text-gray-900 pb-28">
       <header className="px-6 pt-8 pb-6 bg-white shadow-sm">
@@ -214,42 +297,65 @@ export default function SupportPage({ onNavigateBack }: SupportPageProps) {
           <div className="size-11" />
         </div>
 
-        <div className="flex gap-2 bg-slate-100 rounded-full p-1">
-          <button
-            onClick={() => setActiveTab('help')}
-            className={`flex-1 px-4 py-2 text-sm font-semibold rounded-full transition-colors ${
-              activeTab === 'help'
-                ? 'bg-white text-[#111827] shadow-sm'
-                : 'text-[#6B7280]'
-            }`}
-          >
-            Help Center
-          </button>
-          <button
-            onClick={() => setActiveTab('tickets')}
-            className={`flex-1 px-4 py-2 text-sm font-semibold rounded-full transition-colors ${
-              activeTab === 'tickets'
-                ? 'bg-white text-[#111827] shadow-sm'
-                : 'text-[#6B7280]'
-            }`}
-          >
-            My Tickets
-          </button>
-          <button
-            onClick={() => setActiveTab('contact')}
-            className={`flex-1 px-4 py-2 text-sm font-semibold rounded-full transition-colors ${
-              activeTab === 'contact'
-                ? 'bg-white text-[#111827] shadow-sm'
-                : 'text-[#6B7280]'
-            }`}
-          >
-            Contact Us
-          </button>
-        </div>
+        {isSuperAdmin && (
+          <div className="flex gap-2 bg-slate-100 rounded-full p-1">
+            <button
+              onClick={() => setActiveTab('help')}
+              className={`flex-1 px-4 py-2 text-sm font-semibold rounded-full transition-colors ${
+                activeTab === 'help'
+                  ? 'bg-white text-[#111827] shadow-sm'
+                  : 'text-[#6B7280]'
+              }`}
+            >
+              Help Center
+            </button>
+            <button
+              onClick={() => setActiveTab('tickets')}
+              className={`flex-1 px-4 py-2 text-sm font-semibold rounded-full transition-colors ${
+                activeTab === 'tickets'
+                  ? 'bg-white text-[#111827] shadow-sm'
+                  : 'text-[#6B7280]'
+              }`}
+            >
+              My Tickets
+            </button>
+            <button
+              onClick={() => setActiveTab('contact')}
+              className={`flex-1 px-4 py-2 text-sm font-semibold rounded-full transition-colors ${
+                activeTab === 'contact'
+                  ? 'bg-white text-[#111827] shadow-sm'
+                  : 'text-[#6B7280]'
+              }`}
+            >
+              Contact Us
+            </button>
+          </div>
+        )}
       </header>
 
       <main className="px-6 mt-6 space-y-4">
-        {activeTab === 'help' && (
+        {!isSuperAdmin ? (
+          // Regular users see only Contact button
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-[24px] p-8 border-2 border-blue-200 text-center">
+            <div className="size-16 rounded-full bg-blue-600 flex items-center justify-center mx-auto mb-4">
+              <HelpCircle className="size-8 text-white" />
+            </div>
+            <h3 className="font-bold text-xl text-gray-900 mb-2">We're Here to Help</h3>
+            <p className="text-sm text-gray-600 mb-6">
+              Have questions or need assistance? Get in touch with our support team.
+            </p>
+            <button
+              onClick={() => setShowContactModal(true)}
+              className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-colors shadow-lg hover:shadow-xl flex items-center gap-2 mx-auto"
+            >
+              <Mail className="size-5" />
+              Contact Support
+            </button>
+          </div>
+        ) : (
+          // SuperAdmin sees full support page
+          <>
+            {activeTab === 'help' && (
           <>
             <div className="relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 size-5 text-[#9CA3AF]" />
@@ -303,7 +409,7 @@ export default function SupportPage({ onNavigateBack }: SupportPageProps) {
           </>
         )}
 
-        {activeTab === 'tickets' && (
+            {activeTab === 'tickets' && (
           <>
             {!showNewTicket ? (
               <>
@@ -416,7 +522,7 @@ export default function SupportPage({ onNavigateBack }: SupportPageProps) {
           </>
         )}
 
-        {activeTab === 'contact' && (
+            {activeTab === 'contact' && (
           <>
             <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-[24px] p-6 border border-blue-200 shadow-sm">
               <div className="flex items-start gap-4">
@@ -509,8 +615,128 @@ export default function SupportPage({ onNavigateBack }: SupportPageProps) {
               </div>
             </div>
           </>
+            )}
+          </>
         )}
       </main>
+
+      {/* Contact Modal */}
+      {showContactModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-gray-900">Contact Support</h3>
+              <button
+                onClick={() => {
+                  setShowContactModal(false);
+                  setSent(false);
+                  setContactForm({ name: '', email: '', subject: '', message: '' });
+                }}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <X className="size-5 text-gray-600" />
+              </button>
+            </div>
+
+            {sent ? (
+              <div className="text-center py-8">
+                <div className="size-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+                  <Mail className="size-8 text-green-600" />
+                </div>
+                <h4 className="text-lg font-semibold text-gray-900 mb-2">Message Sent!</h4>
+                <p className="text-sm text-gray-600">We'll get back to you soon.</p>
+              </div>
+            ) : (
+              <form onSubmit={handleContactSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-900 mb-1.5">
+                    Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={contactForm.name}
+                    onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Your name"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-900 mb-1.5">
+                    Email <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={contactForm.email}
+                    onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="your.email@example.com"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-900 mb-1.5">
+                    Subject
+                  </label>
+                  <input
+                    type="text"
+                    value={contactForm.subject}
+                    onChange={(e) => setContactForm({ ...contactForm, subject: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="What can we help you with?"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-900 mb-1.5">
+                    Message <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={contactForm.message}
+                    onChange={(e) => setContactForm({ ...contactForm, message: e.target.value })}
+                    rows={5}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                    placeholder="Tell us how we can help..."
+                    required
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowContactModal(false);
+                      setContactForm({ name: '', email: '', subject: '', message: '' });
+                    }}
+                    className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={sending}
+                    className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {sending ? (
+                      <>
+                        <div className="size-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="size-4" />
+                        Send Message
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

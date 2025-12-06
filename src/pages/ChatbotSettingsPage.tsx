@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, MessageCircle, Copy, Check, ExternalLink, Save, Facebook, MessageSquare, Phone, Send, Webhook, Key, Link, AlertCircle, Database, Plus, Sparkles, RefreshCw, Trash2, Power, X, Edit, Lock, Crown } from 'lucide-react';
+import { ArrowLeft, MessageCircle, Copy, Check, CheckCircle, ExternalLink, Save, Facebook, MessageSquare, Phone, Send, Webhook, Key, Link, AlertCircle, Database, Plus, Sparkles, RefreshCw, Trash2, Power, X, Edit, Lock, Crown } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
@@ -10,11 +10,14 @@ interface ChatbotSettingsPageProps {
 
 export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSettingsPageProps) {
   const { user } = useAuth();
+  const isSuperAdmin = user?.email === 'geoffmax22@gmail.com';
   const [activeTab, setActiveTab] = useState<'settings' | 'training' | 'integrations'>('settings');
   const [settings, setSettings] = useState<any>(null);
   const [chatSlug, setChatSlug] = useState('');
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [copiedWebhook, setCopiedWebhook] = useState(false);
   const [copiedToken, setCopiedToken] = useState(false);
   const [integrations, setIntegrations] = useState({
@@ -79,14 +82,31 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
   };
 
   const loadSettings = async () => {
+    if (!user?.id) return;
+    
     const { data } = await supabase
       .from('chatbot_settings')
       .select('*')
-      .eq('user_id', user?.id)
+      .eq('user_id', user.id)
       .maybeSingle();
 
     if (data) {
-      setSettings(data);
+      setSettings({
+        display_name: data.display_name || 'AI Assistant',
+        greeting_message: data.greeting_message || 'Hi! How can I help you today?',
+        tone: data.tone || 'professional',
+        reply_depth: data.reply_depth || 'medium',
+        closing_style: data.closing_style || 'warm',
+        objection_style: data.objection_style || 'empathetic',
+        auto_qualify_threshold: data.auto_qualify_threshold ?? 0.7,
+        auto_convert_to_prospect: data.auto_convert_to_prospect ?? true,
+        enabled_channels: data.enabled_channels || ['web'],
+        widget_color: data.widget_color || '#3B82F6',
+        widget_position: data.widget_position || 'bottom-right',
+        is_active: data.is_active ?? true,
+        integrations: data.integrations || {}
+      });
+      
       if (data.integrations) {
         setIntegrations({ ...integrations, ...data.integrations });
       }
@@ -94,7 +114,8 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
       setUseCustomInstructions(data.use_custom_instructions || false);
       setOverrideIntelligence(data.instructions_override_intelligence || false);
     } else {
-      setSettings({
+      // Create default settings
+      const defaultSettings = {
         display_name: 'AI Assistant',
         greeting_message: 'Hi! How can I help you today?',
         tone: 'professional',
@@ -108,7 +129,21 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
         widget_position: 'bottom-right',
         is_active: true,
         integrations: {}
-      });
+      };
+      
+      setSettings(defaultSettings);
+      
+      // Auto-create settings record
+      try {
+        await supabase
+          .from('chatbot_settings')
+          .insert({
+            user_id: user.id,
+            ...defaultSettings
+          });
+      } catch (error) {
+        console.error('Error creating default settings:', error);
+      }
     }
   };
 
@@ -163,32 +198,53 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
     if (!user || !settings) return;
 
     setSaving(true);
+    setSaveError('');
+    setSaveSuccess(false);
+    
     try {
+      const updateData = {
+        user_id: user.id,
+        display_name: settings.display_name || 'AI Assistant',
+        greeting_message: settings.greeting_message || 'Hi! How can I help you today?',
+        tone: settings.tone || 'professional',
+        reply_depth: settings.reply_depth || 'medium',
+        closing_style: settings.closing_style || 'warm',
+        objection_style: settings.objection_style || 'empathetic',
+        auto_qualify_threshold: settings.auto_qualify_threshold ?? 0.7,
+        auto_convert_to_prospect: settings.auto_convert_to_prospect ?? true,
+        enabled_channels: settings.enabled_channels || ['web'],
+        widget_color: settings.widget_color || '#3B82F6',
+        widget_position: settings.widget_position || 'bottom-right',
+        is_active: settings.is_active ?? true,
+        integrations: integrations || {},
+        custom_system_instructions: customInstructions || null,
+        use_custom_instructions: useCustomInstructions || false,
+        instructions_override_intelligence: overrideIntelligence || false,
+        updated_at: new Date().toISOString()
+      };
+
       const { error } = await supabase
         .from('chatbot_settings')
-        .upsert({
-          user_id: user.id,
-          ...settings,
-          integrations,
-          custom_system_instructions: customInstructions,
-          use_custom_instructions: useCustomInstructions,
-          instructions_override_intelligence: overrideIntelligence,
-          updated_at: new Date().toISOString()
+        .upsert(updateData, {
+          onConflict: 'user_id'
         });
 
       if (error) throw error;
 
-      alert('Settings saved successfully!');
-    } catch (error) {
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (error: any) {
       console.error('Error saving settings:', error);
-      alert('Failed to save settings');
+      setSaveError(error.message || 'Failed to save settings');
+      setTimeout(() => setSaveError(''), 5000);
     } finally {
       setSaving(false);
     }
   };
 
   const generateWebhookUrl = () => {
-    return `https://nexscoutai.com/api/chatbot/webhook/${user?.id}`;
+    const baseUrl = import.meta.env.VITE_APP_URL || 'https://nexscout.co';
+    return `${baseUrl}/api/chatbot/webhook/${user?.id}`;
   };
 
   const generateApiToken = () => {
@@ -209,7 +265,8 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
   };
 
   const copyChatLink = () => {
-    const link = `https://nexscoutai.com/chat/${chatSlug}`;
+    const baseUrl = import.meta.env.VITE_APP_URL || 'https://nexscout.co';
+    const link = `${baseUrl}/chat/${chatSlug}`;
     navigator.clipboard.writeText(link);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -561,6 +618,20 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
       </div>
 
       <div className="max-w-4xl mx-auto px-3 sm:px-6 py-4 space-y-3">
+        {saveSuccess && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
+            <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+            <p className="text-sm text-green-800">Settings saved successfully!</p>
+          </div>
+        )}
+
+        {saveError && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+            <p className="text-sm text-red-800">{saveError}</p>
+          </div>
+        )}
+
         {activeTab === 'settings' && (
           <>
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -886,25 +957,26 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
               )}
             </div>
 
-            {/* Company Data Integration Status - Compact */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-              <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-3 py-2.5 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-white flex-1 min-w-0">
-                  <Sparkles className="w-5 h-5 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-bold truncate">Auto-Sync Intelligence</h3>
-                    <p className="text-xs opacity-90 truncate">Company data synced automatically</p>
+            {/* Company Data Integration Status - Compact - SuperAdmin Only */}
+            {isSuperAdmin && (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-3 py-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-white flex-1 min-w-0">
+                    <Sparkles className="w-5 h-5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-bold truncate">Auto-Sync Intelligence</h3>
+                      <p className="text-xs opacity-90 truncate">Company data synced automatically</p>
+                    </div>
                   </div>
+                  <button
+                    onClick={manualSyncCompanyData}
+                    disabled={syncing}
+                    className="px-2.5 py-1 bg-white/20 hover:bg-white/30 text-white rounded text-xs font-semibold flex items-center gap-1.5 disabled:opacity-50 flex-shrink-0"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+                    <span className="hidden sm:inline">{syncing ? 'Syncing' : 'Sync'}</span>
+                  </button>
                 </div>
-                <button
-                  onClick={manualSyncCompanyData}
-                  disabled={syncing}
-                  className="px-2.5 py-1 bg-white/20 hover:bg-white/30 text-white rounded text-xs font-semibold flex items-center gap-1.5 disabled:opacity-50 flex-shrink-0"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
-                  <span className="hidden sm:inline">{syncing ? 'Syncing' : 'Sync'}</span>
-                </button>
-              </div>
 
               <div className="grid grid-cols-3 gap-px bg-gray-200">
                 <div className="bg-white p-2.5 text-center">
@@ -929,7 +1001,8 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
                   </p>
                 </div>
               </div>
-            </div>
+              </div>
+            )}
 
             {/* Add Training Modal */}
             {showAddTraining && (
@@ -1243,7 +1316,7 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
                     <div className="text-sm text-white/70 mb-2">Your chatbot link:</div>
                     <div className="bg-white/10 rounded-lg p-3 break-all">
                       <code className="text-sm font-mono text-white">
-                        https://nexscoutai.com/chat/{customSlug || chatSlug}
+                        {import.meta.env.VITE_APP_URL || 'https://nexscout.co'}/chat/{customSlug || chatSlug}
                       </code>
                     </div>
                   </div>
@@ -1308,7 +1381,7 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
                   <div className="bg-white/10 backdrop-blur rounded-lg p-4">
                     <label className="block text-sm text-white/90 mb-2 font-medium">Customize your link:</label>
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="text-sm font-mono text-white/70">nexscoutai.com/chat/</span>
+                      <span className="text-sm font-mono text-white/70">{(import.meta.env.VITE_APP_URL || 'https://nexscout.co').replace('https://', '').replace('http://', '')}/chat/</span>
                       <input
                         type="text"
                         value={customSlug}

@@ -385,7 +385,7 @@ class MessagingEngineCanonical {
         context,
         params.industry,
         params.tone,
-        tier === 'elite'
+        tier === 'pro'
       );
 
       // Store in database

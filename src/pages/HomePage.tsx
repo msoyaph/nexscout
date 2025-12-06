@@ -31,6 +31,9 @@ import WalletPage from './WalletPage';
 import PurchaseCoinsPage from './PurchaseCoinsPage';
 import CheckoutPage from './CheckoutPage';
 import ReceiptPage from './ReceiptPage';
+import AmbassadorDashboard from './AmbassadorDashboard';
+import CalendarPage from './CalendarPage';
+import PublicBookingPage from './PublicBookingPage';
 import ProspectsPage from './ProspectsPage';
 import PipelinePage from './PipelinePage';
 import MissionsPage from './MissionsPage';
@@ -65,6 +68,7 @@ import ChatbotSessionViewerPage from './ChatbotSessionViewerPage';
 import ProductListPage from './products/ProductListPage';
 import AddProductPage from './products/AddProductPage';
 import ProductAnalyticsPage from './admin/ProductAnalyticsPage';
+import DeepScanPage from './DeepScanPage';
 
 interface CoinPackage {
   id: string;
@@ -248,23 +252,47 @@ export default function HomePage({
 
   async function loadSchedule() {
     try {
+      setScheduleLoading(true);
+      
+      if (!user) return;
+      
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
 
+      // Load from calendar_bookings (Smart Calendar integration)
       const { data, error } = await supabase
-        .from('schedule_events')
-        .select('*')
-        .eq('user_id', user?.id)
+        .from('calendar_bookings')
+        .select(`
+          *,
+          meeting_type:meeting_types(name, duration_minutes, color)
+        `)
+        .eq('user_id', user.id)
+        .eq('status', 'confirmed')
         .gte('start_time', today.toISOString())
         .lt('start_time', tomorrow.toISOString())
         .order('start_time', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Calendar bookings error:', error);
+        // Fallback to old schedule_events table if calendar not deployed yet
+        const { data: fallbackData } = await supabase
+          .from('schedule_events')
+          .select('*')
+          .eq('user_id', user.id)
+          .gte('start_time', today.toISOString())
+          .lt('start_time', tomorrow.toISOString())
+          .order('start_time', { ascending: true });
+        
+        setScheduleEvents(fallbackData || []);
+        return;
+      }
+
       setScheduleEvents(data || []);
     } catch (error) {
       console.error('Error loading schedule:', error);
+      setScheduleEvents([]);
     } finally {
       setScheduleLoading(false);
     }
@@ -272,19 +300,118 @@ export default function HomePage({
 
   async function loadAlerts() {
     try {
-      const { data, error } = await supabase
-        .from('ai_alerts')
-        .select('*')
-        .eq('user_id', user?.id)
-        .eq('is_dismissed', false)
-        .order('priority', { ascending: true })
-        .order('created_at', { ascending: false })
-        .limit(3);
+      setAlertsLoading(true);
+      
+      if (!user) return;
+      
+      const alerts = [];
+      
+      // 1. CALENDAR ALERTS - Check for upcoming meetings (next 24 hours)
+      try {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        
+        const { data: upcomingMeetings } = await supabase
+          .from('calendar_bookings')
+          .select('*, meeting_type:meeting_types(name)')
+          .eq('user_id', user.id)
+          .eq('status', 'confirmed')
+          .gte('start_time', new Date().toISOString())
+          .lte('start_time', tomorrow.toISOString())
+          .order('start_time', { ascending: true });
+        
+        if (upcomingMeetings && upcomingMeetings.length > 0) {
+          upcomingMeetings.forEach((meeting: any) => {
+            const meetingTime = new Date(meeting.start_time);
+            const hoursUntil = Math.round((meetingTime.getTime() - Date.now()) / (1000 * 60 * 60));
+            const minutesUntil = Math.round((meetingTime.getTime() - Date.now()) / (1000 * 60));
+            
+            alerts.push({
+              id: `meeting-${meeting.id}`,
+              icon: hoursUntil <= 1 ? '🔥' : '📅',
+              title: `Meeting with ${meeting.guest_name}`,
+              message: hoursUntil < 1 
+                ? `Starting in ${minutesUntil} minutes!` 
+                : `In ${hoursUntil} hour${hoursUntil !== 1 ? 's' : ''} - ${meetingTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+              priority: hoursUntil <= 1 ? 1 : minutesUntil <= 60 ? 2 : 3,
+              action: () => setCurrentPage('calendar'),
+              actionLabel: 'View Calendar',
+            });
+          });
+        }
+      } catch (calError) {
+        console.log('Calendar not deployed yet, skipping meeting alerts');
+      }
+      
+      // 2. REMINDERS - Load upcoming reminders from prospect_reminders
+      try {
+        const now = new Date();
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        
+        const { data: reminders, error: remindersError } = await supabase
+          .from('prospect_reminders')
+          .select(`
+            *,
+            prospect:prospects(full_name, uploaded_image_url, social_image_url, avatar_seed)
+          `)
+          .eq('user_id', user.id)
+          .eq('is_completed', false)
+          .gte('reminder_date', now.toISOString())
+          .lte('reminder_date', tomorrow.toISOString())
+          .order('reminder_date', { ascending: true })
+          .limit(5);
 
-      if (error) throw error;
-      setAiAlerts(data || []);
+        if (!remindersError && reminders) {
+          reminders.forEach((reminder: any) => {
+            const reminderTime = new Date(reminder.reminder_date);
+            const hoursUntil = Math.round((reminderTime.getTime() - now.getTime()) / (1000 * 60 * 60));
+            const minutesUntil = Math.round((reminderTime.getTime() - now.getTime()) / (1000 * 60));
+            const prospectName = reminder.prospect?.full_name || 'Prospect';
+            
+            alerts.push({
+              id: `reminder-${reminder.id}`,
+              icon: '🔔',
+              title: `Follow-up: ${prospectName}`,
+              message: reminder.notes || `Time to follow up with ${prospectName}`,
+              priority: minutesUntil <= 30 ? 1 : hoursUntil <= 2 ? 2 : 3,
+              alert_type: 'reminder_due',
+              action: () => handleNavigate('prospect-detail', { prospectId: reminder.prospect_id }),
+              actionLabel: 'View Prospect',
+              related_prospect_id: reminder.prospect_id,
+              reminder_date: reminder.reminder_date,
+            });
+          });
+        }
+      } catch (remindersError) {
+        console.error('Error loading reminders:', remindersError);
+      }
+
+      // 3. AI SALES ALERTS - Load from ai_alerts table
+      try {
+        const { data: aiAlertsData, error } = await supabase
+          .from('ai_alerts')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('is_dismissed', false)
+          .order('priority', { ascending: true })
+          .order('created_at', { ascending: false })
+          .limit(3);
+
+        if (!error && aiAlertsData) {
+          alerts.push(...aiAlertsData);
+        }
+      } catch (aiError) {
+        console.error('Error loading AI alerts:', aiError);
+      }
+
+      // Sort alerts by priority (1 = urgent, 2 = high, 3 = normal)
+      alerts.sort((a, b) => (a.priority || 3) - (b.priority || 3));
+
+      setAiAlerts(alerts);
     } catch (error) {
       console.error('Error loading alerts:', error);
+      setAiAlerts([]);
     } finally {
       setAlertsLoading(false);
     }
@@ -521,6 +648,29 @@ export default function HomePage({
         onNavigateToMore={() => setMenuOpen(true)}
       />
     );
+  }
+
+  if (currentPage === 'ambassador') {
+    return (
+      <AmbassadorDashboard
+        onBack={() => setCurrentPage('wallet')}
+        onNavigate={handleNavigate}
+      />
+    );
+  }
+
+  if (currentPage === 'calendar') {
+    return (
+      <CalendarPage
+        onBack={() => setCurrentPage('home')}
+        onNavigate={handleNavigate}
+      />
+    );
+  }
+
+  if (currentPage.startsWith('book-')) {
+    const slug = currentPage.replace('book-', '');
+    return <PublicBookingPage slug={slug} />;
   }
 
   if (currentPage === 'ai-chatbot') {
@@ -769,6 +919,16 @@ export default function HomePage({
     );
   }
 
+  if (currentPage === 'deep-scan') {
+    return (
+      <DeepScanPage
+        onBack={() => setCurrentPage('prospect-detail')}
+        onNavigate={handleNavigate}
+        prospect={pageOptions?.prospect}
+      />
+    );
+  }
+
   if (currentPage === 'product-detail') {
     return (
       <div className="min-h-screen bg-[#F3F4F6] flex items-center justify-center p-6">
@@ -817,39 +977,22 @@ export default function HomePage({
           </div>
           <div className="flex items-center gap-3">
             <NotificationCenter onNavigate={handleNavigate} />
-            <button
-              onClick={() => handleNavigate('personal-about')}
-              className="relative group"
-              title="View Personal About Me"
-            >
-              <img
-                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.email}`}
-                className="size-10 rounded-full border-2 border-white shadow-[0px_8px_24px_rgba(0,0,0,0.08)] group-hover:border-blue-500 transition-colors"
-                alt="Profile"
-              />
-              <div className="absolute -bottom-1 -right-1 size-4 bg-blue-500 rounded-full border-2 border-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <Sparkles className="size-2.5 text-white" />
-              </div>
-            </button>
           </div>        </div>
         <div className="flex items-center gap-3 overflow-x-auto">
           {profile?.subscription_tier && profile.subscription_tier !== 'free' && (
             <button
               onClick={() => handleNavigate('subscription')}
               className={`rounded-full px-4 py-2 flex items-center gap-2 shadow-[0px_8px_24px_rgba(0,0,0,0.06)] shrink-0 ${
-                profile.subscription_tier === 'elite'
+                profile.subscription_tier === 'pro'
                   ? 'bg-gradient-to-r from-purple-600 to-pink-600'
-                  : profile.subscription_tier === 'pro'
-                  ? 'bg-blue-600'
                   : 'bg-green-600'
               }`}
             >
-              {profile.subscription_tier === 'elite' && (
+              {profile.subscription_tier === 'pro' && (
                 <Crown className="size-4 text-white" fill="white" />
               )}
               <span className="text-sm font-bold text-white">
-                {profile.subscription_tier === 'elite' ? 'Elite' :
-                 profile.subscription_tier === 'pro' ? 'Pro' :
+                {profile.subscription_tier === 'pro' ? 'Pro' :
                  profile.subscription_tier === 'starter' ? 'Starter' : ''}
               </span>
             </button>
@@ -942,6 +1085,156 @@ export default function HomePage({
               >
                 View all prospects
               </button>
+            </div>
+          )}
+        </section>
+
+
+        <section className="bg-white rounded-[30px] shadow-[0px_8px_24px_rgba(0,0,0,0.08)] border border-[#E5E7EB]">
+          <div className="p-5 border-b border-[#E5E7EB] flex justify-between items-center">
+            <h2 className="font-bold text-lg flex items-center gap-2">
+              <Calendar className="size-5 text-[#1877F2]" />
+              Today's Schedule
+            </h2>
+            <button
+              onClick={() => handleNavigate('calendar')}
+              className="text-xs font-semibold text-[#1877F2] hover:text-[#1558B0] transition-colors"
+            >
+              View Calendar →
+            </button>
+          </div>
+          {scheduleLoading ? (
+            <div className="p-8 text-center">
+              <div className="inline-block size-6 border-3 border-[#1877F2] border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-xs text-[#6B7280] mt-2">Loading schedule...</p>
+            </div>
+          ) : (
+            <div className="p-5 space-y-3">
+              {scheduleEvents.length === 0 ? (
+                <div className="text-center py-8">
+                  <Calendar className="size-12 text-[#E5E7EB] mx-auto mb-2" />
+                  <p className="text-sm text-[#6B7280]">No events today</p>
+                  <p className="text-xs text-[#9CA3AF] mt-1">Your schedule is clear!</p>
+                  <button
+                    onClick={() => handleNavigate('calendar')}
+                    className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold text-sm"
+                  >
+                    📅 Open Calendar
+                  </button>
+                </div>
+              ) : (
+                scheduleEvents.map((event) => (
+                  <div 
+                    key={event.id} 
+                    className="flex items-start gap-3 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors"
+                    onClick={() => handleNavigate('calendar')}
+                  >
+                    <div className="text-center shrink-0 w-16">
+                      <div className="text-xs text-[#6B7280] font-medium">{formatTime(event.start_time)}</div>
+                    </div>
+                    <div
+                      className={`flex-1 ${
+                        event.meeting_type
+                          ? 'bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200'
+                          : event.is_ai_suggested
+                          ? 'bg-gradient-to-r from-[#DBEAFE] to-[#BFDBFE] border-[#93C5FD]'
+                          : 'bg-[#F4F6F8] border-[#E5E7EB]'
+                      } rounded-[16px] p-3 border`}
+                    >
+                      <p className="text-sm font-semibold text-[#1F2937]">{event.title}</p>
+                      <p className="text-xs text-[#6B7280] mt-1">
+                        {Math.round((new Date(event.end_time).getTime() - new Date(event.start_time).getTime()) / 60000)} min
+                        {event.location && ` • ${event.location}`}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </section>
+
+        <section className="bg-white rounded-[30px] shadow-[0px_8px_24px_rgba(0,0,0,0.08)] border border-[#E5E7EB]">
+          <div className="p-5 border-b border-[#E5E7EB] flex justify-between items-center">
+            <h2 className="font-bold text-lg flex items-center gap-2">
+              <Bell className="size-5 text-[#EF4444]" />
+              AI Alerts &amp; Reminders
+            </h2>
+            <button
+              onClick={() => handleNavigate('reminders')}
+              className="text-xs font-semibold text-[#EF4444] hover:text-[#DC2626] transition-colors"
+            >
+              View All →
+            </button>
+          </div>
+          {alertsLoading ? (
+            <div className="p-8 text-center">
+              <div className="inline-block size-6 border-3 border-[#1877F2] border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-xs text-[#6B7280] mt-2">Loading alerts...</p>
+            </div>
+          ) : (
+            <div className="p-5 space-y-3">
+              {aiAlerts.length === 0 ? (
+                <div className="text-center py-8">
+                  <Bell className="size-12 text-[#E5E7EB] mx-auto mb-2" />
+                  <p className="text-sm text-[#6B7280]">No alerts</p>
+                  <p className="text-xs text-[#9CA3AF] mt-1">You're all caught up!</p>
+                </div>
+              ) : (
+                aiAlerts.map((alert) => {
+                  const colors = alert.icon ? { bg: 'from-blue-50 to-purple-50', border: 'border-blue-200', icon: 'text-blue-600' } : getAlertColor(alert.priority);
+                  return (
+                    <div
+                      key={alert.id}
+                      className={`bg-gradient-to-r ${colors.bg} rounded-[20px] p-4 border ${colors.border} flex items-start gap-3 ${alert.action ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+                      onClick={() => alert.action && alert.action()}
+                    >
+                      {/* Icon rendering */}
+                      {alert.icon ? (
+                        <span className="text-2xl shrink-0 mt-0.5">{alert.icon}</span>
+                      ) : alert.alert_type === 'cold_prospect' ? (
+                        <AlertCircle className={`size-5 ${colors.icon} shrink-0 mt-0.5`} />
+                      ) : alert.alert_type === 'timing_suggestion' ? (
+                        <Sparkles className={`size-5 ${colors.icon} shrink-0 mt-0.5`} />
+                      ) : (alert.alert_type === 'hot_prospect' || alert.alert_type === 'opportunity') ? (
+                        <Coins className={`size-5 ${colors.icon} shrink-0 mt-0.5`} />
+                      ) : (
+                        <Bell className={`size-5 ${colors.icon} shrink-0 mt-0.5`} />
+                      )}
+                      
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-[#1F2937]">{alert.title}</p>
+                        <p className="text-xs text-[#6B7280] mt-1">{alert.message}</p>
+                        {alert.actionLabel && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (alert.action) alert.action();
+                            }}
+                            className="mt-2 text-xs text-blue-600 hover:text-blue-700 font-semibold"
+                          >
+                            {alert.actionLabel} →
+                          </button>
+                        )}
+                      </div>
+                      
+                      {alert.id && typeof alert.id === 'string' && !alert.id.startsWith('meeting-') && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDismissAlert(alert.id);
+                          }}
+                          className="text-[#9CA3AF] hover:text-[#6B7280] shrink-0"
+                        >
+                          <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  );
+                })
+              )}
             </div>
           )}
         </section>
@@ -1064,121 +1357,6 @@ export default function HomePage({
                     </button>
                   </div>
                 </>
-              )}
-            </div>
-          )}
-        </section>
-
-        <section className="bg-white rounded-[30px] shadow-[0px_8px_24px_rgba(0,0,0,0.08)] border border-[#E5E7EB]">
-          <div className="p-5 border-b border-[#E5E7EB] flex justify-between items-center">
-            <h2 className="font-bold text-lg flex items-center gap-2">
-              <Calendar className="size-5 text-[#1877F2]" />
-              Today's Schedule
-            </h2>
-            <button
-              onClick={() => handleNavigate('calendar')}
-              className="text-xs font-semibold text-[#1877F2] hover:text-[#1558B0] transition-colors"
-            >
-              View Calendar →
-            </button>
-          </div>
-          {scheduleLoading ? (
-            <div className="p-8 text-center">
-              <div className="inline-block size-6 border-3 border-[#1877F2] border-t-transparent rounded-full animate-spin"></div>
-              <p className="text-xs text-[#6B7280] mt-2">Loading schedule...</p>
-            </div>
-          ) : (
-            <div className="p-5 space-y-3">
-              {scheduleEvents.length === 0 ? (
-                <div className="text-center py-8">
-                  <Calendar className="size-12 text-[#E5E7EB] mx-auto mb-2" />
-                  <p className="text-sm text-[#6B7280]">No events today</p>
-                  <p className="text-xs text-[#9CA3AF] mt-1">Your schedule is clear!</p>
-                </div>
-              ) : (
-                scheduleEvents.map((event) => (
-                  <div key={event.id} className="flex items-start gap-3">
-                    <div className="text-center shrink-0 w-16">
-                      <div className="text-xs text-[#6B7280] font-medium">{formatTime(event.start_time)}</div>
-                    </div>
-                    <div
-                      className={`flex-1 ${
-                        event.is_ai_suggested
-                          ? 'bg-gradient-to-r from-[#DBEAFE] to-[#BFDBFE] border-[#93C5FD]'
-                          : 'bg-[#F4F6F8] border-[#E5E7EB]'
-                      } rounded-[16px] p-3 border`}
-                    >
-                      <p className="text-sm font-semibold text-[#1F2937]">{event.title}</p>
-                      <p className="text-xs text-[#6B7280] mt-1">
-                        {Math.round((new Date(event.end_time).getTime() - new Date(event.start_time).getTime()) / 60000)} min
-                        {event.location && ` • ${event.location}`}
-                      </p>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-        </section>
-
-        <section className="bg-white rounded-[30px] shadow-[0px_8px_24px_rgba(0,0,0,0.08)] border border-[#E5E7EB]">
-          <div className="p-5 border-b border-[#E5E7EB] flex justify-between items-center">
-            <h2 className="font-bold text-lg flex items-center gap-2">
-              <Bell className="size-5 text-[#EF4444]" />
-              AI Alerts &amp; Reminders
-            </h2>
-            <button
-              onClick={() => handleNavigate('reminders')}
-              className="text-xs font-semibold text-[#EF4444] hover:text-[#DC2626] transition-colors"
-            >
-              View All →
-            </button>
-          </div>
-          {alertsLoading ? (
-            <div className="p-8 text-center">
-              <div className="inline-block size-6 border-3 border-[#1877F2] border-t-transparent rounded-full animate-spin"></div>
-              <p className="text-xs text-[#6B7280] mt-2">Loading alerts...</p>
-            </div>
-          ) : (
-            <div className="p-5 space-y-3">
-              {aiAlerts.length === 0 ? (
-                <div className="text-center py-8">
-                  <Bell className="size-12 text-[#E5E7EB] mx-auto mb-2" />
-                  <p className="text-sm text-[#6B7280]">No alerts</p>
-                  <p className="text-xs text-[#9CA3AF] mt-1">You're all caught up!</p>
-                </div>
-              ) : (
-                aiAlerts.map((alert) => {
-                  const colors = getAlertColor(alert.priority);
-                  return (
-                    <div
-                      key={alert.id}
-                      className={`bg-gradient-to-r ${colors.bg} rounded-[20px] p-4 border ${colors.border} flex items-start gap-3`}
-                    >
-                      {alert.alert_type === 'cold_prospect' && (
-                        <AlertCircle className={`size-5 ${colors.icon} shrink-0 mt-0.5`} />
-                      )}
-                      {alert.alert_type === 'timing_suggestion' && (
-                        <Sparkles className={`size-5 ${colors.icon} shrink-0 mt-0.5`} />
-                      )}
-                      {(alert.alert_type === 'hot_prospect' || alert.alert_type === 'opportunity') && (
-                        <Coins className={`size-5 ${colors.icon} shrink-0 mt-0.5`} />
-                      )}
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-[#1F2937]">{alert.title}</p>
-                        <p className="text-xs text-[#6B7280] mt-1">{alert.message}</p>
-                      </div>
-                      <button
-                        onClick={() => handleDismissAlert(alert.id)}
-                        className="text-[#9CA3AF] hover:text-[#6B7280] shrink-0"
-                      >
-                        <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  );
-                })
               )}
             </div>
           )}

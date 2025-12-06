@@ -350,7 +350,7 @@ class EnergyEngineV2 {
     const resetAmounts: Record<string, number> = {
       free: 5,
       pro: 15,
-      elite: 30,
+      pro: 30, // Elite removed, Pro gets max regen
       team: 50,
       enterprise: 100
     };
@@ -380,7 +380,7 @@ class EnergyEngineV2 {
     const modifiers: Record<string, number> = {
       free: 1.1,     // +10% cost
       pro: 0.95,     // -5% cost
-      elite: 0.85,   // -15% cost
+      pro: 0.85,   // -15% cost (Elite removed)
       team: 0.80,    // -20% cost
       enterprise: 0.70 // -30% cost
     };

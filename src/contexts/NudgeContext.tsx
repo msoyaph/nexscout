@@ -112,15 +112,21 @@ export function NudgeProvider({ children }: { children: React.ReactNode }) {
 
   // Navigate to upgrade page
   const goToUpgrade = useCallback(() => {
-    // TODO: Implement navigation to pricing/subscription page
-    // For now, we'll just log and dismiss
-    console.log('Navigate to upgrade page');
     dismissNudge();
 
-    // You can trigger a navigation event or use a router here
+    // Navigate to pricing page
     window.dispatchEvent(new CustomEvent('navigate-to-upgrade', {
-      detail: { targetTier: nudgeState.config?.targetTier },
+      detail: { targetTier: nudgeState.config?.targetTier, page: 'pricing' },
     }));
+    
+    // Also try direct navigation if available
+    if (window.location.pathname !== '/pricing') {
+      // Use history API or trigger navigation
+      const navEvent = new CustomEvent('navigate', {
+        detail: { page: 'pricing' },
+      });
+      window.dispatchEvent(navEvent);
+    }
   }, [nudgeState.config, dismissNudge]);
 
   // Auto-check nudges on profile changes

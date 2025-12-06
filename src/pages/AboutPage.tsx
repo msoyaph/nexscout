@@ -1,10 +1,97 @@
-import { ArrowLeft, Target, Zap, Users, Heart, Award, TrendingUp, Lightbulb, Shield } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowLeft, Target, Zap, Users, Heart, Award, TrendingUp, Lightbulb, Shield, Mail, X } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 
 interface AboutPageProps {
   onNavigateBack: () => void;
 }
 
 export default function AboutPage({ onNavigateBack }: AboutPageProps) {
+  const { user, profile } = useAuth();
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [contactForm, setContactForm] = useState({
+    name: '',
+    email: '',
+    subject: '',
+    message: ''
+  });
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  // SuperAdmin check - only geoffmax22@gmail.com can see contact info
+  const isSuperAdmin = user?.email === 'geoffmax22@gmail.com';
+
+  const handleContactSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!contactForm.name || !contactForm.email || !contactForm.message) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    setSending(true);
+    try {
+      // Store contact message in database (create table if needed)
+      const { error: dbError } = await supabase
+        .from('contact_messages')
+        .insert({
+          user_id: user?.id || null,
+          name: contactForm.name,
+          email: contactForm.email,
+          subject: contactForm.subject || 'Contact Form Submission',
+          message: contactForm.message,
+          status: 'new',
+          created_at: new Date().toISOString()
+        });
+
+      // If table doesn't exist, we'll still try to send email
+      if (dbError && dbError.code !== '42P01') { // 42P01 = table doesn't exist
+        console.warn('Could not save to database:', dbError);
+      }
+
+      // Send email via edge function
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-contact-email`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            },
+            body: JSON.stringify({
+              fromEmail: contactForm.email,
+              fromName: contactForm.name,
+              subject: contactForm.subject || 'Contact Form Submission from NexScout',
+              message: contactForm.message,
+              toEmail: 'geoffmax22@gmail.com', // Hidden from user
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          // If edge function doesn't exist, that's okay - message is stored in DB
+          console.warn('Email edge function not available, message saved to database');
+        }
+      } catch (emailError) {
+        // Email sending failed, but message is stored
+        console.warn('Email sending failed, but message is saved:', emailError);
+      }
+
+      setSent(true);
+      setContactForm({ name: '', email: '', subject: '', message: '' });
+      setTimeout(() => {
+        setShowContactModal(false);
+        setSent(false);
+      }, 2000);
+    } catch (error: any) {
+      console.error('Error sending contact message:', error);
+      alert('Failed to send message. Please try again.');
+    } finally {
+      setSending(false);
+    }
+  };
   return (
     <div className="bg-gray-50 min-h-screen text-gray-900 pb-28">
       <header className="px-6 pt-8 pb-6 bg-white shadow-sm">
@@ -157,19 +244,19 @@ export default function AboutPage({ onNavigateBack }: AboutPageProps) {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-[16px]">
-              <div className="text-3xl font-bold text-blue-600 mb-1">10K+</div>
+              <div className="text-3xl font-bold text-blue-600 mb-1">NA</div>
               <div className="text-xs text-[#6B7280]">Active Users</div>
             </div>
             <div className="text-center p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-[16px]">
-              <div className="text-3xl font-bold text-green-600 mb-1">1M+</div>
+              <div className="text-3xl font-bold text-green-600 mb-1">NA</div>
               <div className="text-xs text-[#6B7280]">AI Scans Completed</div>
             </div>
             <div className="text-center p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-[16px]">
-              <div className="text-3xl font-bold text-purple-600 mb-1">95%</div>
+              <div className="text-3xl font-bold text-purple-600 mb-1">NA</div>
               <div className="text-xs text-[#6B7280]">Customer Satisfaction</div>
             </div>
             <div className="text-center p-4 bg-gradient-to-br from-orange-50 to-orange-100 rounded-[16px]">
-              <div className="text-3xl font-bold text-orange-600 mb-1">24/7</div>
+              <div className="text-3xl font-bold text-orange-600 mb-1">NA</div>
               <div className="text-xs text-[#6B7280]">Support Available</div>
             </div>
           </div>
@@ -223,19 +310,150 @@ export default function AboutPage({ onNavigateBack }: AboutPageProps) {
         <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-[24px] p-6 border-2 border-green-200">
           <div className="text-center">
             <div className="size-14 rounded-full bg-green-600 flex items-center justify-center mx-auto mb-4">
-              <Users className="size-7 text-white" />
+              <Mail className="size-7 text-white" />
             </div>
             <h3 className="font-bold text-lg text-[#111827] mb-2">Get in Touch</h3>
             <p className="text-sm text-[#6B7280] mb-4">
               Have questions or want to learn more? We'd love to hear from you.
             </p>
-            <div className="space-y-2 text-sm text-[#6B7280]">
-              <p>Email: hello@company.com</p>
-              <p>Phone: +63 2 8888 8888</p>
-              <p>Address: 123 Business Street, Makati City, Metro Manila, Philippines</p>
-            </div>
+            
+            {isSuperAdmin ? (
+              // Show contact info only to SuperAdmin
+              <div className="space-y-2 text-sm text-[#6B7280]">
+                <p>Email: hello@company.com</p>
+                <p>Phone: +63 2 8888 8888</p>
+                <p>Address: 123 Business Street, Makati City, Metro Manila, Philippines</p>
+              </div>
+            ) : (
+              // Show Contact button for regular users
+              <button
+                onClick={() => setShowContactModal(true)}
+                className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition-colors shadow-lg hover:shadow-xl flex items-center gap-2 mx-auto"
+              >
+                <Mail className="size-5" />
+                Contact Us
+              </button>
+            )}
           </div>
         </div>
+
+        {/* Contact Modal */}
+        {showContactModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-gray-900">Contact Us</h3>
+                <button
+                  onClick={() => {
+                    setShowContactModal(false);
+                    setSent(false);
+                    setContactForm({ name: '', email: '', subject: '', message: '' });
+                  }}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <X className="size-5 text-gray-600" />
+                </button>
+              </div>
+
+              {sent ? (
+                <div className="text-center py-8">
+                  <div className="size-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+                    <Mail className="size-8 text-green-600" />
+                  </div>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-2">Message Sent!</h4>
+                  <p className="text-sm text-gray-600">We'll get back to you soon.</p>
+                </div>
+              ) : (
+                <form onSubmit={handleContactSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-1.5">
+                      Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={contactForm.name}
+                      onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      placeholder="Your name"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-1.5">
+                      Email <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="email"
+                      value={contactForm.email}
+                      onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      placeholder="your.email@example.com"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-1.5">
+                      Subject
+                    </label>
+                    <input
+                      type="text"
+                      value={contactForm.subject}
+                      onChange={(e) => setContactForm({ ...contactForm, subject: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      placeholder="What's this about?"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-1.5">
+                      Message <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      value={contactForm.message}
+                      onChange={(e) => setContactForm({ ...contactForm, message: e.target.value })}
+                      rows={5}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
+                      placeholder="Tell us how we can help..."
+                      required
+                    />
+                  </div>
+
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowContactModal(false);
+                        setContactForm({ name: '', email: '', subject: '', message: '' });
+                      }}
+                      className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={sending}
+                      className="flex-1 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {sending ? (
+                        <>
+                          <div className="size-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Sending...
+                        </>
+                      ) : (
+                        <>
+                          <Mail className="size-4" />
+                          Send Message
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

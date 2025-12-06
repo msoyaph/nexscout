@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Battery, Coins, Crown, Video, Zap, TrendingUp, Clock } from 'lucide-react';
+import { ArrowLeft, Battery, Crown, Video, Zap, TrendingUp, Clock, Sparkles } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { energyEngine } from '../services/energy/energyEngine';
-import { supabase } from '../lib/supabase';
 import EnergyBar from '../components/EnergyBar';
+import AdPlayer from '../components/AdPlayer';
 
 interface EnergyRefillPageProps {
   onBack: () => void;
@@ -14,12 +14,12 @@ export default function EnergyRefillPage({ onBack }: EnergyRefillPageProps) {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
-  const [coinBalance, setCoinBalance] = useState(0);
+  const [showAdPlayer, setShowAdPlayer] = useState(false);
+  const [adsWatchedToday, setAdsWatchedToday] = useState(0);
 
   useEffect(() => {
     if (user) {
       loadStats();
-      loadCoinBalance();
     }
   }, [user]);
 
@@ -37,62 +37,35 @@ export default function EnergyRefillPage({ onBack }: EnergyRefillPageProps) {
     }
   };
 
-  const loadCoinBalance = async () => {
+  // Removed: coin balance loading (no longer needed for energy purchase)
+
+  // Removed: coin-to-energy conversion (creates pricing arbitrage)
+  // Energy now obtained via: daily reset, watching ads, or upgrading subscription
+
+  const handleWatchAd = () => {
     if (!user) return;
-
-    const { data } = await supabase
-      .from('coin_wallets')
-      .select('balance')
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    if (data) {
-      setCoinBalance(data.balance);
-    }
-  };
-
-  const handlePurchase = async (coins: number, energy: number) => {
-    if (!user) return;
-
-    if (coinBalance < coins) {
-      alert('Insufficient coins. Purchase coins first!');
+    if (adsWatchedToday >= 5) {
+      alert('You\'ve watched the maximum 5 ads today. Come back tomorrow!');
       return;
     }
-
-    setPurchasing(true);
-    try {
-      const result = await energyEngine.purchaseEnergyWithCoins(user.id, coins, energy);
-
-      if (result.success) {
-        alert(`Successfully purchased ${energy} energy!`);
-        await loadStats();
-        await loadCoinBalance();
-      } else {
-        alert(result.error || 'Purchase failed');
-      }
-    } catch (error) {
-      console.error('Error purchasing energy:', error);
-      alert('Purchase failed');
-    } finally {
-      setPurchasing(false);
-    }
+    setShowAdPlayer(true);
   };
 
-  const handleWatchAd = async () => {
+  const handleAdComplete = async () => {
     if (!user) return;
 
-    setPurchasing(true);
     try {
-      // Simulate ad watching
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Award energy for watching ad
       await energyEngine.addEnergy(user.id, 2, 'refill', 'Watched ad');
-      alert('You gained 2 energy!');
+      setAdsWatchedToday(prev => prev + 1);
+      setShowAdPlayer(false);
       await loadStats();
+      
+      // Show success message
+      alert(`🎉 You gained 2 energy! (${adsWatchedToday + 1}/5 ads today)`);
     } catch (error) {
-      console.error('Error watching ad:', error);
-      alert('Failed to watch ad');
-    } finally {
-      setPurchasing(false);
+      console.error('Error completing ad:', error);
+      alert('Failed to award energy. Please try again.');
     }
   };
 
@@ -121,7 +94,17 @@ export default function EnergyRefillPage({ onBack }: EnergyRefillPageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 pb-28">
+    <>
+      {/* Ad Player Modal */}
+      {showAdPlayer && (
+        <AdPlayer
+          onComplete={handleAdComplete}
+          onClose={() => setShowAdPlayer(false)}
+          reward={{ energy: 2 }}
+        />
+      )}
+
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 pb-28">
       {/* Header */}
       <header className="px-6 pt-8 pb-6 bg-white shadow-sm">
         <div className="flex items-center justify-between mb-4">
@@ -168,118 +151,92 @@ export default function EnergyRefillPage({ onBack }: EnergyRefillPageProps) {
           </div>
         </section>
 
-        {/* Coin Balance */}
-        <section className="bg-white rounded-[30px] shadow-lg p-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center">
-                <Coins className="w-6 h-6 text-yellow-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Available Coins</p>
-                <p className="text-2xl font-bold text-gray-900">{coinBalance}</p>
-              </div>
+        {/* Energy Info */}
+        <section className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-[30px] border border-blue-200 p-6">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+              <Zap className="w-6 h-6 text-blue-600" />
             </div>
-            <button
-              onClick={() => window.location.href = '/wallet'}
-              className="px-4 py-2 bg-yellow-500 text-white rounded-xl font-semibold hover:bg-yellow-600 transition-colors"
-            >
-              Buy Coins
-            </button>
+            <div className="flex-1">
+              <h3 className="font-bold text-gray-900 mb-2">⚡ How to Get More Energy</h3>
+              <ul className="text-sm text-gray-700 space-y-2">
+                <li className="flex items-start gap-2">
+                  <span className="text-blue-600 mt-0.5">•</span>
+                  <span><strong>Free:</strong> Watch ads below (up to 5 per day)</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-blue-600 mt-0.5">•</span>
+                  <span><strong>Daily Reset:</strong> Energy refills automatically every 24 hours</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-purple-600 mt-0.5">•</span>
+                  <span><strong>Best Value:</strong> Upgrade to Pro for 100 energy/day!</span>
+                </li>
+              </ul>
+            </div>
           </div>
         </section>
 
-        {/* Watch Ads */}
-        <section className="bg-white rounded-[30px] shadow-lg">
-          <div className="p-5 border-b border-gray-200">
+        {/* Watch Ads - Primary Free Energy Source */}
+        <section className="bg-white rounded-[30px] shadow-lg overflow-hidden">
+          <div className="p-5 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-pink-50">
             <div className="flex items-center gap-3">
               <Video className="w-6 h-6 text-purple-600" />
               <div>
-                <h2 className="font-bold text-gray-900">Watch Ads</h2>
-                <p className="text-xs text-gray-600">Free energy by watching short videos</p>
-              </div>
-            </div>
-          </div>
-          <div className="p-5">
-            <button
-              onClick={handleWatchAd}
-              disabled={purchasing}
-              className="w-full flex items-center gap-3 p-4 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl hover:shadow-lg transition-all disabled:opacity-50"
-            >
-              <Video className="w-6 h-6 text-white" />
-              <div className="flex-1 text-left">
-                <p className="font-semibold text-white">Watch 30s Ad</p>
-                <p className="text-sm text-white/80">Get +2 energy (Max 2/day)</p>
-              </div>
-              <div className="px-4 py-2 bg-white/20 rounded-lg">
-                <span className="text-lg font-bold text-white">+2 ⚡</span>
-              </div>
-            </button>
-          </div>
-        </section>
-
-        {/* Purchase Options */}
-        <section className="bg-white rounded-[30px] shadow-lg">
-          <div className="p-5 border-b border-gray-200">
-            <div className="flex items-center gap-3">
-              <Zap className="w-6 h-6 text-yellow-600" />
-              <div>
-                <h2 className="font-bold text-gray-900">Buy with Coins</h2>
-                <p className="text-xs text-gray-600">Instant energy refill</p>
+                <h2 className="font-bold text-gray-900">Watch Ads for Free Energy</h2>
+                <p className="text-xs text-gray-600">Up to 5 ads per day = 10 free energy! 🎉</p>
               </div>
             </div>
           </div>
           <div className="p-5 space-y-3">
-            {/* 3 coins = 3 energy */}
             <button
-              onClick={() => handlePurchase(3, 3)}
-              disabled={purchasing || coinBalance < 3}
-              className="w-full flex items-center gap-3 p-4 bg-gradient-to-r from-yellow-400 to-orange-400 rounded-xl hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={handleWatchAd}
+              disabled={purchasing || adsWatchedToday >= 5}
+              className="w-full flex items-center gap-3 p-5 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl hover:shadow-lg transition-all disabled:opacity-50 active:scale-[0.99]"
             >
-              <Coins className="w-6 h-6 text-white" />
-              <div className="flex-1 text-left">
-                <p className="font-semibold text-white">3 Coins</p>
-                <p className="text-sm text-white/80">Quick refill</p>
+              <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
+                <Video className="w-6 h-6 text-white" />
               </div>
-              <div className="px-4 py-2 bg-white/20 rounded-lg">
-                <span className="text-lg font-bold text-white">+3 ⚡</span>
+              <div className="flex-1 text-left">
+                <p className="font-semibold text-white text-lg">Watch 30s Video</p>
+                <p className="text-sm text-white/90">Get +2 energy instantly</p>
+              </div>
+              <div className="px-5 py-3 bg-white/20 backdrop-blur-sm rounded-xl">
+                <span className="text-2xl font-bold text-white">+2 ⚡</span>
               </div>
             </button>
+            
+            <div className="bg-purple-50 border border-purple-100 rounded-xl p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-purple-700">
+                  <Sparkles className="w-4 h-4" />
+                  <span className="font-semibold">Watch 5 ads = 10 free energy!</span>
+                </div>
+                <div className="text-sm font-bold text-purple-900">
+                  {adsWatchedToday}/5 today
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
 
-            {/* 5 coins = 5 energy */}
-            <button
-              onClick={() => handlePurchase(5, 5)}
-              disabled={purchasing || coinBalance < 5}
-              className="w-full flex items-center gap-3 p-4 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-xl hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Coins className="w-6 h-6 text-white" />
-              <div className="flex-1 text-left">
-                <p className="font-semibold text-white">5 Coins</p>
-                <p className="text-sm text-white/80">Standard refill</p>
-              </div>
-              <div className="px-4 py-2 bg-white/20 rounded-lg">
-                <span className="text-lg font-bold text-white">+5 ⚡</span>
-              </div>
-            </button>
-
-            {/* 10 coins = 12 energy (best value) */}
-            <div className="relative">
-              <div className="absolute -top-2 -right-2 z-10 bg-red-500 text-white text-xs px-2 py-1 rounded-full font-bold">
-                Best Value!
-              </div>
+        {/* Info: Coins Are For Add-Ons */}
+        <section className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-[30px] border border-yellow-200 p-6">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center shrink-0">
+              <Coins className="w-6 h-6 text-yellow-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-bold text-gray-900 mb-2">💰 Need More Coins?</h3>
+              <p className="text-sm text-gray-700 mb-3">
+                Coins are used for premium add-ons like AI Video Scripts, Competitor Analysis, 
+                WhatsApp Integration, and more!
+              </p>
               <button
-                onClick={() => handlePurchase(10, 12)}
-                disabled={purchasing || coinBalance < 10}
-                className="w-full flex items-center gap-3 p-4 bg-gradient-to-r from-yellow-600 to-orange-600 rounded-xl hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed border-2 border-yellow-400"
+                onClick={() => window.location.href = '/wallet'}
+                className="px-5 py-2.5 bg-yellow-500 text-white rounded-xl font-semibold hover:bg-yellow-600 transition-colors shadow-md"
               >
-                <Coins className="w-6 h-6 text-white" />
-                <div className="flex-1 text-left">
-                  <p className="font-semibold text-white">10 Coins</p>
-                  <p className="text-sm text-white/80">20% bonus energy!</p>
-                </div>
-                <div className="px-4 py-2 bg-white/20 rounded-lg">
-                  <span className="text-lg font-bold text-white">+12 ⚡</span>
-                </div>
+                Buy Coins for Add-Ons
               </button>
             </div>
           </div>
@@ -297,16 +254,16 @@ export default function EnergyRefillPage({ onBack }: EnergyRefillPageProps) {
 
           <div className="grid grid-cols-3 gap-3 mb-4">
             <div className="bg-white/10 rounded-xl p-3 text-center">
-              <p className="text-2xl font-bold text-white">25</p>
+              <p className="text-2xl font-bold text-white">10</p>
+              <p className="text-xs text-white/80">Free Daily</p>
+            </div>
+            <div className="bg-white/10 rounded-xl p-3 text-center">
+              <p className="text-2xl font-bold text-white">100</p>
               <p className="text-xs text-white/80">Pro Daily</p>
             </div>
             <div className="bg-white/10 rounded-xl p-3 text-center">
-              <p className="text-2xl font-bold text-white">99</p>
-              <p className="text-xs text-white/80">Elite Daily</p>
-            </div>
-            <div className="bg-white/10 rounded-xl p-3 text-center">
-              <p className="text-2xl font-bold text-white">∞</p>
-              <p className="text-xs text-white/80">Enterprise</p>
+              <p className="text-2xl font-bold text-white">500</p>
+              <p className="text-xs text-white/80">Team Daily</p>
             </div>
           </div>
 
@@ -356,6 +313,7 @@ export default function EnergyRefillPage({ onBack }: EnergyRefillPageProps) {
           </section>
         )}
       </main>
-    </div>
+      </div>
+    </>
   );
 }

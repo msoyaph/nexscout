@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, ChevronRight, MoreHorizontal, MessageCircle, Eye, Trash2, Facebook, Bot, Sparkles, Users, TrendingUp } from 'lucide-react';
+import { ArrowLeft, ChevronRight, MoreHorizontal, MessageCircle, Eye, Trash2, Facebook, Bot, Sparkles, Users, TrendingUp, BarChart3 } from 'lucide-react';
 import ProspectAvatar from '../components/ProspectAvatar';
 import AIPipelineControlPanel from '../components/AIPipelineControlPanel';
 import PipelineWalletDisplay from '../components/PipelineWalletDisplay';
 import CoinPurchaseModal from '../components/CoinPurchaseModal';
+import AutomationQuotaModal from '../components/AutomationQuotaModal';
+import ProspectProgressModal from '../components/ProspectProgressModal';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -33,6 +35,8 @@ export default function PipelinePage({ onBack, onNavigate }: PipelinePageProps) 
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [showAIPanel, setShowAIPanel] = useState(false);
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [showProgressModal, setShowProgressModal] = useState(false);
+  const [selectedProspect, setSelectedProspect] = useState<ProspectCard | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -50,18 +54,84 @@ export default function PipelinePage({ onBack, onNavigate }: PipelinePageProps) 
 
       if (error) throw error;
 
-      const formatted = (data || []).map((p: any) => ({
-        id: p.id,
-        name: p.full_name,
-        full_name: p.full_name,
-        uploaded_image_url: p.uploaded_image_url,
-        social_image_url: p.social_image_url,
-        avatar_seed: p.avatar_seed,
-        score: p.metadata?.scout_score || 0,
-        platform: p.platform,
-        lastContact: getTimeAgo(p.metadata?.last_contact || p.last_seen_activity_at),
-        pipeline_stage: p.pipeline_stage || 'discover',
-      }));
+      // Get last message timestamps for all prospects
+      const prospectIds = (data || []).map((p: any) => p.id);
+      
+      // Query omnichannel messages for last contact (only if we have prospects)
+      let lastMessages: any[] = [];
+      if (prospectIds.length > 0) {
+        const { data: messagesData } = await supabase
+          .from('omnichannel_messages')
+          .select('prospect_id, created_at')
+          .in('prospect_id', prospectIds)
+          .order('created_at', { ascending: false });
+        lastMessages = messagesData || [];
+      }
+
+      // Query chat sessions linked to prospects (only if we have prospects)
+      let pipelineLinks: any[] = [];
+      if (prospectIds.length > 0) {
+        const { data: linksData } = await supabase
+          .from('chatbot_to_prospect_pipeline')
+          .select('prospect_id, public_chat_sessions(last_message_at)')
+          .in('prospect_id', prospectIds);
+        pipelineLinks = linksData || [];
+      }
+
+      // Create a map of prospect_id to last contact time
+      const lastContactMap = new Map<string, string>();
+      
+      // Process omnichannel messages
+      if (lastMessages) {
+        lastMessages.forEach((msg: any) => {
+          if (!lastContactMap.has(msg.prospect_id) || 
+              new Date(msg.created_at) > new Date(lastContactMap.get(msg.prospect_id) || '')) {
+            lastContactMap.set(msg.prospect_id, msg.created_at);
+          }
+        });
+      }
+
+      // Process chat session messages
+      if (pipelineLinks) {
+        pipelineLinks.forEach((link: any) => {
+          const chatSession = link.public_chat_sessions;
+          if (chatSession?.last_message_at) {
+            const prospectId = link.prospect_id;
+            const existingTime = lastContactMap.get(prospectId);
+            if (!existingTime || new Date(chatSession.last_message_at) > new Date(existingTime)) {
+              lastContactMap.set(prospectId, chatSession.last_message_at);
+            }
+          }
+        });
+      }
+
+      const formatted = (data || []).map((p: any) => {
+        // Get last contact from messages, metadata, or last_seen_activity_at
+        const lastMessageTime = lastContactMap.get(p.id);
+        const metadataTime = p.metadata?.last_contact;
+        const activityTime = p.last_seen_activity_at;
+        
+        // Use the most recent timestamp available
+        const timestamps = [lastMessageTime, metadataTime, activityTime].filter(Boolean);
+        const lastContactTime = timestamps.length > 0
+          ? timestamps.reduce((latest, current) => 
+              new Date(current || '') > new Date(latest || '') ? current : latest
+            )
+          : null;
+
+        return {
+          id: p.id,
+          name: p.full_name,
+          full_name: p.full_name,
+          uploaded_image_url: p.uploaded_image_url,
+          social_image_url: p.social_image_url,
+          avatar_seed: p.avatar_seed,
+          score: p.metadata?.scout_score || 0,
+          platform: p.platform,
+          lastContact: getTimeAgo(lastContactTime),
+          pipeline_stage: p.pipeline_stage || 'discover',
+        };
+      });
 
       setProspects(formatted);
     } catch (error) {
@@ -144,6 +214,9 @@ export default function PipelinePage({ onBack, onNavigate }: PipelinePageProps) 
   const ProspectCard = ({ prospect, stage }: { prospect: ProspectCard; stage: string }) => {
     const nextStage = getNextStage(stage);
     const isMenuOpen = openMenuId === prospect.id;
+    
+    // SuperAdmin access for development
+    const isSuperAdmin = user?.email === 'geoffmax22@gmail.com';
 
     return (
       <div className="relative bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-all">
@@ -179,10 +252,10 @@ export default function PipelinePage({ onBack, onNavigate }: PipelinePageProps) 
                     className="fixed inset-0 z-10"
                     onClick={() => setOpenMenuId(null)}
                   />
-                  <div className="absolute right-0 top-8 z-20 w-44 bg-white rounded-xl shadow-lg border border-gray-200 py-1">
+                  <div className="absolute right-0 top-8 z-20 w-48 bg-white rounded-xl shadow-lg border border-gray-200 py-1">
                     <button
                       onClick={() => {
-                        onNavigate(`prospect-detail-${prospect.id}`);
+                        onNavigate('prospect-detail', { prospectId: prospect.id });
                         setOpenMenuId(null);
                       }}
                       className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
@@ -215,10 +288,65 @@ export default function PipelinePage({ onBack, onNavigate }: PipelinePageProps) 
           </div>
 
           {/* Last Contact */}
-          <div className="flex items-center gap-1 text-xs text-gray-500 mb-3">
+          <div className="flex items-center gap-1 text-xs text-gray-500 mb-2">
             <MessageCircle className="w-3 h-3" />
             <span>{prospect.lastContact}</span>
           </div>
+
+          {/* AI Smart Recommendation - PREMIUM FEATURE */}
+          {prospect.score >= 70 && stage === 'engage' && (
+            <div className="mb-2 px-2 py-1.5 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg">
+              <div className="flex items-center gap-1 mb-1">
+                <Sparkles className="w-3 h-3 text-purple-600" />
+                <span className="text-[10px] font-bold text-purple-900 uppercase">AI Suggests</span>
+              </div>
+              <p className="text-xs text-gray-700 leading-tight">
+                <strong>Follow-Up</strong> – High score, send message now
+              </p>
+            </div>
+          )}
+          {prospect.score >= 75 && stage === 'qualify' && (
+            <div className="mb-2 px-2 py-1.5 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg">
+              <div className="flex items-center gap-1 mb-1">
+                <Sparkles className="w-3 h-3 text-green-600" />
+                <span className="text-[10px] font-bold text-green-900 uppercase">AI Suggests</span>
+              </div>
+              <p className="text-xs text-gray-700 leading-tight">
+                <strong>Book Meeting</strong> – Ready to close, schedule call
+              </p>
+            </div>
+          )}
+          {prospect.score < 50 && (stage === 'engage' || stage === 'qualify') && (
+            <div className="mb-2 px-2 py-1.5 bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-lg">
+              <div className="flex items-center gap-1 mb-1">
+                <Sparkles className="w-3 h-3 text-amber-600" />
+                <span className="text-[10px] font-bold text-amber-900 uppercase">AI Suggests</span>
+              </div>
+              <p className="text-xs text-gray-700 leading-tight">
+                <strong>Nurture</strong> – Score low, build trust first
+              </p>
+            </div>
+          )}
+
+          {/* See Progress Button - SuperAdmin Only */}
+          <button
+            onClick={() => {
+              if (isSuperAdmin) {
+                setSelectedProspect(prospect);
+                setShowProgressModal(true);
+              }
+            }}
+            disabled={!isSuperAdmin}
+            className={`w-full py-2 mb-2 rounded-xl text-sm font-semibold transition-all shadow-sm flex items-center justify-center gap-1.5 ${
+              isSuperAdmin
+                ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 hover:shadow-md cursor-pointer'
+                : 'bg-gray-200 text-gray-400 cursor-not-allowed opacity-60'
+            }`}
+            title={!isSuperAdmin ? 'This feature is currently in development' : 'View prospect progress'}
+          >
+            <Sparkles className="w-4 h-4" />
+            See Progress
+          </button>
 
           {/* Action Button */}
           {nextStage ? (
@@ -296,6 +424,9 @@ export default function PipelinePage({ onBack, onNavigate }: PipelinePageProps) 
                   <p className="text-xs text-gray-600">Won Rate</p>
                   <p className="text-sm font-bold text-gray-900">{conversionRate}%</p>
                 </div>
+              </div>
+              {/* Premium Automation Quota */}
+              <div className="ml-2">
               </div>
             </div>
           </div>
@@ -515,6 +646,25 @@ export default function PipelinePage({ onBack, onNavigate }: PipelinePageProps) 
           // Resources will auto-refresh in wallet display
         }}
       />
+
+      {/* Prospect Progress Modal */}
+      {showProgressModal && selectedProspect && (
+        <ProspectProgressModal
+          isOpen={showProgressModal}
+          onClose={() => {
+            setShowProgressModal(false);
+            setSelectedProspect(null);
+          }}
+          prospect={{
+            id: selectedProspect.id,
+            full_name: selectedProspect.full_name,
+            score: selectedProspect.score,
+            stage: selectedProspect.pipeline_stage,
+            profile_image_url: selectedProspect.uploaded_image_url || selectedProspect.social_image_url,
+            avatar_seed: selectedProspect.avatar_seed,
+          }}
+        />
+      )}
     </div>
   );
 }

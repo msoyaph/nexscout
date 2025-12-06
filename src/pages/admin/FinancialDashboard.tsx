@@ -89,7 +89,7 @@ export default function FinancialDashboard() {
 
   const getTierColor = (tier: string): string => {
     if (tier === 'pro') return 'blue';
-    if (tier === 'elite') return 'purple';
+    if (tier === 'pro') return 'purple'; // Elite removed, Pro gets purple
     if (tier === 'team') return 'green';
     if (tier === 'enterprise') return 'orange';
     return 'gray';

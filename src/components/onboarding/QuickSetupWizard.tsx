@@ -46,6 +46,7 @@ const industries = [
   { value: 'online_seller', label: 'Online Seller', icon: ShoppingBag, color: 'from-orange-500 to-red-500', examples: 'Shopee, Lazada' },
   { value: 'coaching', label: 'Coaching / Consulting', icon: GraduationCap, color: 'from-indigo-500 to-purple-500', examples: 'Life Coach, Business Consultant' },
   { value: 'service', label: 'Service Provider', icon: Building2, color: 'from-teal-500 to-green-500', examples: 'Virtual Assistant, Freelancer' },
+  { value: 'others', label: 'Others: Please Specify', icon: Sparkles, color: 'from-gray-500 to-gray-700', examples: 'Let AI detect your industry' },
 ];
 
 const channels = [
@@ -60,6 +61,9 @@ const channels = [
 export default function QuickSetupWizard({ onComplete, userId }: QuickSetupWizardProps) {
   const [step, setStep] = useState(1);
   const [industry, setIndustry] = useState('');
+  const [customIndustryInput, setCustomIndustryInput] = useState('');
+  const [detectedIndustry, setDetectedIndustry] = useState('');
+  const [detectingIndustry, setDetectingIndustry] = useState(false);
   const [companyInput, setCompanyInput] = useState('');
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<any | null>(null);
@@ -68,8 +72,52 @@ export default function QuickSetupWizard({ onComplete, userId }: QuickSetupWizar
 
   const handleIndustrySelect = (value: string) => {
     setIndustry(value);
-    setStep(2);
+    if (value !== 'others') {
+      setStep(2);
+    }
+    // If 'others', stay on step 1 to show input field
   };
+
+  const handleCustomIndustrySubmit = async () => {
+    if (customIndustryInput.length < 3) {
+      alert('Please describe your business');
+      return;
+    }
+
+    // Use AI to detect industry
+    setDetectingIndustry(true);
+    try {
+      const detected = await detectIndustryWithAI(customIndustryInput);
+      setDetectedIndustry(detected);
+      setIndustry(detected || 'others');
+      setStep(2);
+    } catch (error) {
+      console.error('Error detecting industry:', error);
+      // Fallback: use the input as-is
+      setIndustry(customIndustryInput);
+      setStep(2);
+    } finally {
+      setDetectingIndustry(false);
+    }
+  };
+
+  async function detectIndustryWithAI(description: string): Promise<string> {
+    // Call edge function or OpenAI to detect industry
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/detect-industry`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ description })
+      }
+    );
+
+    const data = await response.json();
+    return data.industry || description;
+  }
 
   const handleCompanySearch = async (input: string) => {
     setCompanyInput(input);
@@ -146,23 +194,76 @@ export default function QuickSetupWizard({ onComplete, userId }: QuickSetupWizar
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {industries.map((ind) => {
                 const Icon = ind.icon;
+                const isOthers = ind.value === 'others';
+                const isSelected = industry === ind.value;
+                
                 return (
-                  <button
-                    key={ind.value}
-                    onClick={() => handleIndustrySelect(ind.value)}
-                    className="group relative overflow-hidden rounded-2xl p-6 text-left transition-all hover:scale-105 hover:shadow-xl bg-white border-2 border-gray-200 hover:border-transparent"
-                  >
-                    <div className={`absolute inset-0 bg-gradient-to-br ${ind.color} opacity-0 group-hover:opacity-10 transition-opacity`} />
-                    <div className="relative flex items-start gap-4">
-                      <div className={`p-3 rounded-xl bg-gradient-to-br ${ind.color}`}>
-                        <Icon className="w-6 h-6 text-white" />
+                  <div key={ind.value}>
+                    <button
+                      onClick={() => handleIndustrySelect(ind.value)}
+                      className={`w-full group relative overflow-hidden rounded-2xl p-6 text-left transition-all hover:scale-105 hover:shadow-xl bg-white border-2 ${
+                        isSelected ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-transparent'
+                      }`}
+                    >
+                      <div className={`absolute inset-0 bg-gradient-to-br ${ind.color} opacity-0 group-hover:opacity-10 transition-opacity`} />
+                      <div className="relative flex items-start gap-4">
+                        <div className={`p-3 rounded-xl bg-gradient-to-br ${ind.color}`}>
+                          <Icon className="w-6 h-6 text-white" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-gray-900 mb-1">{ind.label}</h3>
+                          <p className="text-sm text-gray-500">{ind.examples}</p>
+                        </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-gray-900 mb-1">{ind.label}</h3>
-                        <p className="text-sm text-gray-500">{ind.examples}</p>
+                    </button>
+
+                    {/* Custom Industry Input (shown when Others is selected) */}
+                    {isOthers && isSelected && (
+                      <div className="mt-4 p-6 bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border-2 border-purple-200 animate-fade-in">
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                          <Sparkles className="w-4 h-4 inline mr-2 text-purple-500" />
+                          Describe your business:
+                        </label>
+                        <textarea
+                          value={customIndustryInput}
+                          onChange={(e) => setCustomIndustryInput(e.target.value)}
+                          placeholder="e.g., I sell organic skincare products online&#10;e.g., I provide virtual bookkeeping services&#10;e.g., I run a pet grooming business"
+                          rows={3}
+                          className="w-full px-4 py-3 border-2 border-purple-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent mb-4"
+                          autoFocus
+                        />
+                        
+                        {detectedIndustry && (
+                          <div className="mb-4 p-3 bg-green-50 rounded-lg border border-green-200">
+                            <div className="flex items-center gap-2">
+                              <Sparkles className="w-4 h-4 text-green-600" />
+                              <span className="text-sm font-semibold text-green-900">
+                                AI Detected: {detectedIndustry}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        <button
+                          onClick={handleCustomIndustrySubmit}
+                          disabled={customIndustryInput.length < 3 || detectingIndustry}
+                          className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                          {detectingIndustry ? (
+                            <>
+                              <Loader className="w-5 h-5 animate-spin" />
+                              Detecting Industry with AI...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="w-5 h-5" />
+                              Continue
+                            </>
+                          )}
+                        </button>
                       </div>
-                    </div>
-                  </button>
+                    )}
+                  </div>
                 );
               })}
             </div>

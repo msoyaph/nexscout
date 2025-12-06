@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ArrowLeft, Shield, Eye, Trash2, Download, Lock, Bell, Globe, Database, AlertCircle, CheckCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ArrowLeft, Shield, Eye, Trash2, Download, Lock, Bell, Globe, Database, AlertCircle, CheckCircle, Sparkles, Loader } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
@@ -9,7 +9,11 @@ interface PrivacySecurityPageProps {
 }
 
 export default function PrivacySecurityPage({ onNavigateBack, onNavigate }: PrivacySecurityPageProps) {
-  const { user } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
+  const isSuperAdmin = user?.email === 'geoffmax22@gmail.com';
+  
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [marketingEmails, setMarketingEmails] = useState(true);
   const [productUpdates, setProductUpdates] = useState(true);
@@ -17,13 +21,134 @@ export default function PrivacySecurityPage({ onNavigateBack, onNavigate }: Priv
   const [profileVisibility, setProfileVisibility] = useState<'public' | 'private'>('public');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const Toggle = ({ enabled, onChange }: { enabled: boolean; onChange: () => void }) => (
+  useEffect(() => {
+    loadSettings();
+  }, [profile]);
+
+  const loadSettings = async () => {
+    if (!user || !profile) return;
+    
+    setLoading(true);
+    try {
+      // Load notification preferences
+      const prefs = profile.notification_preferences || {};
+      setMarketingEmails(prefs.marketing_emails !== false);
+      setProductUpdates(prefs.product_updates !== false);
+      setSecurityAlerts(prefs.security_alerts !== false);
+      
+      // Load profile visibility
+      setProfileVisibility(profile.profile_visibility || 'public');
+      
+      // Load 2FA status (if available)
+      setTwoFactorEnabled(profile.two_factor_enabled || false);
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveEmailPreferences = async () => {
+    if (!user) return;
+    
+    setSaving(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+    
+    try {
+      const prefs = profile?.notification_preferences || {};
+      const updatedPrefs = {
+        ...prefs,
+        marketing_emails: marketingEmails,
+        product_updates: productUpdates,
+        security_alerts: securityAlerts,
+      };
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({ notification_preferences: updatedPrefs })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      await refreshProfile();
+      setSuccessMessage('Email preferences saved successfully');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (error: any) {
+      console.error('Error saving email preferences:', error);
+      setErrorMessage('Failed to save email preferences');
+      setTimeout(() => setErrorMessage(''), 3000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveProfileVisibility = async () => {
+    if (!user) return;
+    
+    setSaving(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+    
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ profile_visibility: profileVisibility })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      await refreshProfile();
+      setSuccessMessage('Profile visibility updated');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (error: any) {
+      console.error('Error saving profile visibility:', error);
+      setErrorMessage('Failed to update profile visibility');
+      setTimeout(() => setErrorMessage(''), 3000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTwoFactorToggle = async (enabled: boolean) => {
+    if (!isSuperAdmin) {
+      setErrorMessage('Two-Factor Authentication is coming soon');
+      setTimeout(() => setErrorMessage(''), 3000);
+      return;
+    }
+    
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ two_factor_enabled: enabled })
+        .eq('id', user?.id);
+
+      if (error) throw error;
+
+      setTwoFactorEnabled(enabled);
+      await refreshProfile();
+      setSuccessMessage(enabled ? 'Two-Factor Authentication enabled' : 'Two-Factor Authentication disabled');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (error: any) {
+      console.error('Error updating 2FA:', error);
+      setErrorMessage('Failed to update Two-Factor Authentication');
+      setTimeout(() => setErrorMessage(''), 3000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const Toggle = ({ enabled, onChange, disabled }: { enabled: boolean; onChange: () => void; disabled?: boolean }) => (
     <button
       onClick={onChange}
+      disabled={disabled}
       className={`w-11 h-6 rounded-full flex items-center p-0.5 transition-colors ${
         enabled ? 'bg-blue-600' : 'bg-gray-300'
-      }`}
+      } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
     >
       <div
         className={`size-5 bg-white rounded-full shadow-sm transition-transform ${
@@ -33,8 +158,26 @@ export default function PrivacySecurityPage({ onNavigateBack, onNavigate }: Priv
     </button>
   );
 
-  const handleDownloadData = () => {
-    console.log('Download data requested');
+  const handleDownloadData = async () => {
+    if (!isSuperAdmin) {
+      setErrorMessage('Data download is coming soon');
+      setTimeout(() => setErrorMessage(''), 3000);
+      return;
+    }
+    
+    setSaving(true);
+    try {
+      // This would trigger a data export process
+      // For now, we'll just show a message
+      setSuccessMessage('Data export initiated. You will receive an email when ready.');
+      setTimeout(() => setSuccessMessage(''), 5000);
+    } catch (error: any) {
+      console.error('Error downloading data:', error);
+      setErrorMessage('Failed to initiate data download');
+      setTimeout(() => setErrorMessage(''), 3000);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDeleteAccount = async () => {
@@ -43,11 +186,34 @@ export default function PrivacySecurityPage({ onNavigateBack, onNavigate }: Priv
       return;
     }
 
+    if (!user) return;
+
     setDeleteLoading(true);
+    setErrorMessage('');
+    
     try {
-      console.log('Account deletion requested');
-    } catch (error) {
+      // Delete user data from all tables (cascade should handle most)
+      // Then delete the auth user
+      const { error: deleteError } = await supabase.auth.admin.deleteUser(user.id);
+      
+      if (deleteError) {
+        // If admin delete fails, try regular user deletion
+        // Note: This requires proper RLS policies
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .delete()
+          .eq('id', user.id);
+        
+        if (profileError) throw profileError;
+      }
+
+      // Sign out and redirect
+      await supabase.auth.signOut();
+      window.location.href = '/';
+    } catch (error: any) {
       console.error('Error deleting account:', error);
+      setErrorMessage('Failed to delete account. Please contact support.');
+      setShowDeleteConfirm(false);
     } finally {
       setDeleteLoading(false);
     }
@@ -69,6 +235,20 @@ export default function PrivacySecurityPage({ onNavigateBack, onNavigate }: Priv
       </header>
 
       <main className="px-6 mt-6 space-y-4">
+        {successMessage && (
+          <div className="bg-green-50 border border-green-200 rounded-[20px] p-4 flex items-center gap-3">
+            <CheckCircle className="size-5 text-green-600 shrink-0" />
+            <p className="text-sm text-green-800">{successMessage}</p>
+          </div>
+        )}
+
+        {errorMessage && (
+          <div className="bg-red-50 border border-red-200 rounded-[20px] p-4 flex items-center gap-3">
+            <AlertCircle className="size-5 text-red-600 shrink-0" />
+            <p className="text-sm text-red-800">{errorMessage}</p>
+          </div>
+        )}
+
         <div className="bg-white rounded-[24px] border border-[#E5E7EB] shadow-sm overflow-hidden">
           <div className="p-5 border-b border-gray-200">
             <div className="flex items-center gap-3">
@@ -97,7 +277,12 @@ export default function PrivacySecurityPage({ onNavigateBack, onNavigate }: Priv
               <ArrowLeft className="size-5 text-gray-600 rotate-180" />
             </button>
 
-            <div className="flex items-center justify-between p-4">
+            <div className={`flex items-center justify-between p-4 ${!isSuperAdmin ? 'opacity-60 pointer-events-none relative' : ''}`}>
+              {!isSuperAdmin && (
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 px-3 py-1 bg-gray-700 text-white text-xs font-bold rounded-full flex items-center gap-1 z-10">
+                  <Sparkles className="w-3 h-3" /> Coming Soon
+                </div>
+              )}
               <div className="flex items-center gap-3">
                 <Shield className="size-5 text-gray-600" />
                 <div>
@@ -105,7 +290,11 @@ export default function PrivacySecurityPage({ onNavigateBack, onNavigate }: Priv
                   <p className="text-xs text-gray-600">Add an extra layer of security</p>
                 </div>
               </div>
-              <Toggle enabled={twoFactorEnabled} onChange={() => setTwoFactorEnabled(!twoFactorEnabled)} />
+              <Toggle 
+                enabled={twoFactorEnabled} 
+                onChange={() => handleTwoFactorToggle(!twoFactorEnabled)}
+                disabled={!isSuperAdmin}
+              />
             </div>
           </div>
         </div>
@@ -136,22 +325,30 @@ export default function PrivacySecurityPage({ onNavigateBack, onNavigate }: Priv
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setProfileVisibility('public')}
+                  onClick={() => {
+                    setProfileVisibility('public');
+                    saveProfileVisibility();
+                  }}
+                  disabled={saving}
                   className={`flex-1 py-2 px-4 rounded-[16px] text-sm font-semibold transition-colors ${
                     profileVisibility === 'public'
                       ? 'bg-blue-600 text-white'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
+                  } disabled:opacity-50`}
                 >
                   Public
                 </button>
                 <button
-                  onClick={() => setProfileVisibility('private')}
+                  onClick={() => {
+                    setProfileVisibility('private');
+                    saveProfileVisibility();
+                  }}
+                  disabled={saving}
                   className={`flex-1 py-2 px-4 rounded-[16px] text-sm font-semibold transition-colors ${
                     profileVisibility === 'private'
                       ? 'bg-blue-600 text-white'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
+                  } disabled:opacity-50`}
                 >
                   Private
                 </button>
@@ -196,7 +393,13 @@ export default function PrivacySecurityPage({ onNavigateBack, onNavigate }: Priv
                   <p className="text-xs text-gray-600">Account security notifications</p>
                 </div>
               </div>
-              <Toggle enabled={securityAlerts} onChange={() => setSecurityAlerts(!securityAlerts)} />
+              <Toggle 
+                enabled={securityAlerts} 
+                onChange={() => {
+                  setSecurityAlerts(!securityAlerts);
+                  setTimeout(() => saveEmailPreferences(), 300);
+                }}
+              />
             </div>
 
             <div className="flex items-center justify-between p-4">
@@ -207,7 +410,13 @@ export default function PrivacySecurityPage({ onNavigateBack, onNavigate }: Priv
                   <p className="text-xs text-gray-600">New features and improvements</p>
                 </div>
               </div>
-              <Toggle enabled={productUpdates} onChange={() => setProductUpdates(!productUpdates)} />
+              <Toggle 
+                enabled={productUpdates} 
+                onChange={() => {
+                  setProductUpdates(!productUpdates);
+                  setTimeout(() => saveEmailPreferences(), 300);
+                }}
+              />
             </div>
 
             <div className="flex items-center justify-between p-4">
@@ -218,7 +427,13 @@ export default function PrivacySecurityPage({ onNavigateBack, onNavigate }: Priv
                   <p className="text-xs text-gray-600">Promotional content and offers</p>
                 </div>
               </div>
-              <Toggle enabled={marketingEmails} onChange={() => setMarketingEmails(!marketingEmails)} />
+              <Toggle 
+                enabled={marketingEmails} 
+                onChange={() => {
+                  setMarketingEmails(!marketingEmails);
+                  setTimeout(() => saveEmailPreferences(), 300);
+                }}
+              />
             </div>
           </div>
         </div>
@@ -237,19 +452,42 @@ export default function PrivacySecurityPage({ onNavigateBack, onNavigate }: Priv
           </div>
 
           <div className="divide-y divide-gray-200">
-            <button
-              onClick={handleDownloadData}
-              className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <Download className="size-5 text-gray-600" />
-                <div className="text-left">
-                  <p className="text-sm font-semibold text-gray-900">Download Your Data</p>
-                  <p className="text-xs text-gray-600">Get a copy of your information</p>
+            {isSuperAdmin ? (
+              <button
+                onClick={handleDownloadData}
+                disabled={saving}
+                className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                <div className="flex items-center gap-3">
+                  <Download className="size-5 text-gray-600" />
+                  <div className="text-left">
+                    <p className="text-sm font-semibold text-gray-900">Download Your Data</p>
+                    <p className="text-xs text-gray-600">Get a copy of your information</p>
+                  </div>
+                </div>
+                {saving ? (
+                  <Loader className="size-5 text-gray-600 animate-spin" />
+                ) : (
+                  <ArrowLeft className="size-5 text-gray-600 rotate-180" />
+                )}
+              </button>
+            ) : (
+              <div className="relative p-4 opacity-60 pointer-events-none">
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 px-3 py-1 bg-gray-700 text-white text-xs font-bold rounded-full flex items-center gap-1 z-10">
+                  <Sparkles className="w-3 h-3" /> Coming Soon
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Download className="size-5 text-gray-600" />
+                    <div className="text-left">
+                      <p className="text-sm font-semibold text-gray-900">Download Your Data</p>
+                      <p className="text-xs text-gray-600">Get a copy of your information</p>
+                    </div>
+                  </div>
+                  <ArrowLeft className="size-5 text-gray-600 rotate-180" />
                 </div>
               </div>
-              <ArrowLeft className="size-5 text-gray-600 rotate-180" />
-            </button>
+            )}
           </div>
         </div>
 

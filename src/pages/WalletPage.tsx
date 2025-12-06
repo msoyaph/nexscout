@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Wallet, Zap, TrendingUp, Clock, Home, Users, MoreHorizontal, Gift, Copy, Check, PlusCircle, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Wallet, TrendingUp, Clock, Home, Users, MoreHorizontal, Check, MessageSquare, Crown, Share2, ChevronDown, ChevronUp, Search, Filter, X, Copy } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { useEnergy } from '../contexts/EnergyContext';
 import { walletService, CoinTransaction } from '../services/walletService';
-import { referralService } from '../services/referralService';
 import { supabase } from '../lib/supabase';
 import SlideInMenu from '../components/SlideInMenu';
 import ActionPopup from '../components/ActionPopup';
@@ -19,20 +17,36 @@ interface WalletPageProps {
 
 export default function WalletPage({ onBack, onNavigateToPurchase, onNavigate, onNavigateToMore }: WalletPageProps) {
   const { profile, user, refreshProfile } = useAuth();
-  const { currentEnergy, maxEnergy, purchaseEnergyWithCoins, refreshEnergy } = useEnergy();
   const [activeTab, setActiveTab] = useState('home');
   const [transactions, setTransactions] = useState<CoinTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [convertingEnergy, setConvertingEnergy] = useState(false);
-  const [referralData, setReferralData] = useState<any>(null);
-  const [copied, setCopied] = useState(false);
   const [showActionPopup, setShowActionPopup] = useState(false);
+  const [ambassadorExpanded, setAmbassadorExpanded] = useState(false);
+  const [ambassadorData, setAmbassadorData] = useState<any>(null);
+  const [copiedReferralLink, setCopiedReferralLink] = useState(false);
+  const [customUserId, setCustomUserId] = useState<string>('');
+  const [copiedMainReferralLink, setCopiedMainReferralLink] = useState(false);
+  
+  // Filters
+  const [typeFilter, setTypeFilter] = useState<'all' | 'earned' | 'spent' | 'purchased' | 'bonus' | 'ad_reward'>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month' | 'custom'>('all');
+  const [showFilters, setShowFilters] = useState(false);
+  const [customDateRange, setCustomDateRange] = useState({ start: '', end: '' });
+  
   const notificationCounts = useNotificationCounts();
 
   useEffect(() => {
     loadWalletData();
   }, [profile?.id]);
+
+  // Reload when filters change
+  useEffect(() => {
+    if (profile?.id) {
+      loadWalletData();
+    }
+  }, [typeFilter, dateFilter]);
 
   useEffect(() => {
     if (!profile?.id) return;
@@ -64,57 +78,176 @@ export default function WalletPage({ onBack, onNavigateToPurchase, onNavigate, o
     setLoading(true);
     try {
       await refreshProfile();
-      await refreshEnergy();
-      const transactionData = await walletService.getTransactionHistory(profile.id, 10, 'all');
-      setTransactions(transactionData);
+      
+      // Load transactions (safe fallback with filters)
+      try {
+        const dateRange = getDateRange();
+        const transactionData = await walletService.getTransactionHistory(
+          profile.id, 
+          50, // Load more for filtering
+          typeFilter,
+          dateRange,
+          searchTerm
+        );
+        setTransactions(transactionData);
+      } catch (txError) {
+        console.error('Error loading transactions:', txError);
+        setTransactions([]);
+      }
 
+      // Load ambassador data if exists
       if (user?.id) {
-        const refData = await referralService.getReferralStats(user.id);
-        setReferralData(refData);
+        try {
+          const { data: ambassadorProfile } = await supabase
+            .from('ambassador_profiles')
+            .select('*')
+            .eq('user_id', user.id)
+            .maybeSingle();
+          
+          setAmbassadorData(ambassadorProfile);
+        } catch (error) {
+          console.error('Error loading ambassador data:', error);
+          setAmbassadorData(null);
+        }
+      }
+
+      // Load custom user ID (chatbot_id) for referral link
+      if (user?.id) {
+        try {
+          // First try to get from chatbot_links table
+          const { data: chatbotLink } = await supabase
+            .from('chatbot_links')
+            .select('chatbot_id, custom_slug')
+            .eq('user_id', user.id)
+            .eq('is_active', true)
+            .maybeSingle();
+          
+          if (chatbotLink) {
+            // For Pro users with custom slug, use custom_slug
+            // Otherwise use chatbot_id (short ID like tu5828)
+            if (profile?.subscription_tier === 'pro' && chatbotLink.custom_slug) {
+              setCustomUserId(chatbotLink.custom_slug);
+            } else {
+              setCustomUserId(chatbotLink.chatbot_id);
+            }
+          } else {
+            // Fallback: try to get unique_user_id from profiles
+            const { data: profileData } = await supabase
+              .from('profiles')
+              .select('unique_user_id')
+              .eq('id', user.id)
+              .maybeSingle();
+            
+            if (profileData?.unique_user_id) {
+              setCustomUserId(profileData.unique_user_id);
+            }
+          }
+        } catch (error) {
+          console.error('Error loading custom user ID:', error);
+        }
       }
     } catch (error) {
       console.error('Error loading wallet data:', error);
+      // Don't crash the whole page
     } finally {
       setLoading(false);
     }
   };
 
-  const handleConvertToEnergy = async (energyAmount: number) => {
-    setConvertingEnergy(true);
-    try {
-      console.log('=== WALLET: Starting energy conversion ===');
-      console.log('Amount:', energyAmount);
-      console.log('Current Energy:', currentEnergy);
-      console.log('Max Energy:', maxEnergy);
-      console.log('Coin Balance:', profile?.coin_balance);
+  // Removed: handleConvertToEnergy (coin-to-energy conversion deprecated)
 
-      const success = await purchaseEnergyWithCoins(energyAmount);
+  const handleCopyReferralLink = () => {
+    if (!ambassadorData?.referral_code) return;
+    
+    const referralLink = `${window.location.origin}/signup?ref=${ambassadorData.referral_code}`;
+    navigator.clipboard.writeText(referralLink);
+    setCopiedReferralLink(true);
+    setTimeout(() => setCopiedReferralLink(false), 2000);
+  };
 
-      console.log('=== WALLET: Conversion result:', success ? 'SUCCESS' : 'FAILED', '===');
+  const handleCopyMainReferralLink = () => {
+    if (!customUserId) return;
+    
+    const referralLink = `${window.location.origin}/ref/${customUserId}`;
+    
+    navigator.clipboard.writeText(referralLink);
+    setCopiedMainReferralLink(true);
+    setTimeout(() => setCopiedMainReferralLink(false), 2000);
+  };
 
-      if (success) {
-        alert(`✅ Success! Converted to +${energyAmount} energy`);
-        await loadWalletData();
-      } else {
-        alert('❌ Conversion failed.\n\nPlease open browser console (F12) and share the [ENERGY] logs with support.');
-      }
-    } catch (error) {
-      console.error('=== WALLET: Exception during conversion ===', error);
-      alert('❌ An error occurred.\n\nPlease open browser console (F12) and share the error logs.');
-    } finally {
-      setConvertingEnergy(false);
+  const getDateRange = (): { start: Date; end: Date } | undefined => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    switch (dateFilter) {
+      case 'today':
+        return { start: today, end: now };
+      case 'week':
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        return { start: weekAgo, end: now };
+      case 'month':
+        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        return { start: monthAgo, end: now };
+      case 'custom':
+        if (customDateRange.start && customDateRange.end) {
+          return {
+            start: new Date(customDateRange.start),
+            end: new Date(customDateRange.end),
+          };
+        }
+        return undefined;
+      default:
+        return undefined;
     }
   };
 
-  const handleCopyReferralCode = async () => {
-    if (!referralData?.referral_code) return;
+  const handleTypeFilterChange = (type: typeof typeFilter) => {
+    setTypeFilter(type);
+    // Auto-reloads via useEffect
+  };
 
-    try {
-      await navigator.clipboard.writeText(referralData.referral_code);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
-      console.error('Error copying:', error);
+  const handleDateFilterChange = (range: typeof dateFilter) => {
+    setDateFilter(range);
+    // Auto-reloads via useEffect
+  };
+
+  const handleSearchChange = (term: string) => {
+    setSearchTerm(term);
+    // Manual reload with debounce
+    setTimeout(() => {
+      if (profile?.id) {
+        loadWalletData();
+      }
+    }, 500);
+  };
+
+  const clearFilters = () => {
+    setTypeFilter('all');
+    setDateFilter('all');
+    setSearchTerm('');
+    setCustomDateRange({ start: '', end: '' });
+    loadWalletData();
+  };
+
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case 'earn': return '💰';
+      case 'spend': return '💸';
+      case 'bonus': return '🎁';
+      case 'purchase': return '🛒';
+      case 'ad_reward': return '📺';
+      default: return '💵';
+    }
+  };
+
+  const getTypeLabel = (type: string) => {
+    switch (type) {
+      case 'earn': return 'Earned';
+      case 'spend': return 'Spent';
+      case 'bonus': return 'Bonus';
+      case 'purchase': return 'Purchase';
+      case 'ad_reward': return 'Ad Reward';
+      default: return type;
     }
   };
 
@@ -146,16 +279,7 @@ export default function WalletPage({ onBack, onNavigateToPurchase, onNavigate, o
     setActiveTab(page);
   };
 
-  const getTierReward = (tier: string): number => {
-    const rewards: Record<string, number> = {
-      free: 100,
-      pro: 50,
-      elite: 100,
-      team: 350,
-      enterprise: 10000
-    };
-    return rewards[tier] || 100;
-  };
+  // Removed: getTierReward (old referral system, not used anymore)
 
   return (
     <div className="min-h-screen bg-[#F0F2F5] pb-20">
@@ -195,110 +319,264 @@ export default function WalletPage({ onBack, onNavigateToPurchase, onNavigate, o
           </div>
         </div>
 
-        {referralData && (
-          <div className="bg-white rounded-lg shadow-sm p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Gift className="w-5 h-5 text-green-600" />
-              <h3 className="text-sm font-semibold text-gray-900">Referral Rewards</h3>
-            </div>
-
-            <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg p-3 mb-3">
-              <p className="text-xs text-gray-600 mb-2">Your Referral Code</p>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 bg-white px-3 py-2 rounded text-sm font-mono font-bold text-gray-900">
-                  {referralData.referral_code}
-                </code>
-                <button
-                  onClick={handleCopyReferralCode}
-                  className="p-2 bg-white rounded hover:bg-gray-50 transition-colors"
-                >
-                  {copied ? (
-                    <Check className="w-4 h-4 text-green-600" />
-                  ) : (
-                    <Copy className="w-4 h-4 text-gray-600" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 text-center">
-              <div className="bg-gray-50 rounded-lg p-2">
-                <p className="text-lg font-bold text-gray-900">{referralData.total_referrals || 0}</p>
-                <p className="text-xs text-gray-500">Referrals</p>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-2">
-                <p className="text-lg font-bold text-green-600">+{referralData.total_earnings || 0}</p>
-                <p className="text-xs text-gray-500">Coins Earned</p>
-              </div>
-            </div>
-
-            <div className="mt-3 pt-3 border-t border-gray-100">
-              <p className="text-xs text-gray-500 text-center">
-                Earn <span className="font-bold text-green-600">+{getTierReward(profile?.subscription_tier || 'free')}</span> coins per referral
-              </p>
-            </div>
+        {/* Referral Link Card */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Share2 className="w-5 h-5 text-[#1877F2]" />
+            <h3 className="font-bold text-gray-900">Your Referral Link</h3>
           </div>
-        )}
+          
+          <p className="text-xs text-gray-600 mb-3">
+            Share this link to earn {profile?.subscription_tier === 'pro' ? 'commissions' : 'coins & energy'} from referrals
+          </p>
 
-        <div className="bg-white rounded-lg shadow-sm p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Zap className="w-5 h-5 text-yellow-500" />
-              <h3 className="text-sm font-semibold text-gray-900">Energy Converter</h3>
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-gray-500">Current</p>
-              <p className="text-sm font-bold text-gray-900">{currentEnergy} / {maxEnergy}</p>
-            </div>
-          </div>
-
-          <div className="text-xs text-gray-500 mb-3">
-            Rate: 10 coins = 1 energy
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
+          <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <code className="flex-1 text-xs font-mono text-gray-900 truncate">
+              {customUserId ? `${window.location.origin}/ref/${customUserId}` : 'Loading...'}
+            </code>
             <button
-              onClick={() => handleConvertToEnergy(1)}
-              disabled={convertingEnergy || (profile?.coin_balance || 0) < 10 || currentEnergy >= maxEnergy}
-              className="bg-gradient-to-br from-yellow-400 to-orange-500 hover:from-yellow-500 hover:to-orange-600 disabled:from-gray-200 disabled:to-gray-300 disabled:cursor-not-allowed text-white rounded-lg p-3 transition-all flex flex-col items-center"
+              onClick={handleCopyMainReferralLink}
+              disabled={!customUserId}
+              className="p-2 hover:bg-gray-200 rounded transition-colors shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Copy link"
             >
-              <Zap className="w-4 h-4 mb-1" />
-              <p className="text-xs font-bold">+1</p>
-              <p className="text-[10px] opacity-80">10 coins</p>
-            </button>
-            <button
-              onClick={() => handleConvertToEnergy(5)}
-              disabled={convertingEnergy || (profile?.coin_balance || 0) < 50 || currentEnergy >= maxEnergy}
-              className="bg-gradient-to-br from-yellow-400 to-orange-500 hover:from-yellow-500 hover:to-orange-600 disabled:from-gray-200 disabled:to-gray-300 disabled:cursor-not-allowed text-white rounded-lg p-3 transition-all flex flex-col items-center"
-            >
-              <Zap className="w-4 h-4 mb-1" />
-              <p className="text-xs font-bold">+5</p>
-              <p className="text-[10px] opacity-80">50 coins</p>
-            </button>
-            <button
-              onClick={() => handleConvertToEnergy(10)}
-              disabled={convertingEnergy || (profile?.coin_balance || 0) < 100 || currentEnergy >= maxEnergy}
-              className="bg-gradient-to-br from-yellow-400 to-orange-500 hover:from-yellow-500 hover:to-orange-600 disabled:from-gray-200 disabled:to-gray-300 disabled:cursor-not-allowed text-white rounded-lg p-3 transition-all flex flex-col items-center"
-            >
-              <Zap className="w-4 h-4 mb-1" />
-              <p className="text-xs font-bold">+10</p>
-              <p className="text-[10px] opacity-80">100 coins</p>
+              {copiedMainReferralLink ? (
+                <Check className="w-4 h-4 text-green-600" />
+              ) : (
+                <Copy className="w-4 h-4 text-gray-600" />
+              )}
             </button>
           </div>
 
-          {currentEnergy >= maxEnergy && (
-            <p className="text-xs text-center text-gray-500 mt-2">Energy at max capacity</p>
+          {copiedMainReferralLink && (
+            <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
+              <Check className="w-3 h-3" />
+              Link copied to clipboard!
+            </p>
           )}
         </div>
 
+        {/* Ambassador Program Card - Collapsible */}
+        <div className="bg-gradient-to-br from-[#1877F2] to-[#0C63D4] rounded-lg shadow-lg text-white overflow-hidden">
+          {/* Header - Always Visible */}
+          <button
+            onClick={() => setAmbassadorExpanded(!ambassadorExpanded)}
+            className="w-full p-5 flex items-center justify-between hover:bg-white/5 transition-colors"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0">
+                <Crown className="w-6 h-6 text-white" />
+              </div>
+              <div className="text-left">
+                <h3 className="text-lg font-bold">💰 Ambassador Program</h3>
+                <p className="text-sm text-white/90">
+                  {profile?.subscription_tier === 'pro' ? 'Earn ₱649.50 + ₱194.85/mo per user!' : 'Earn 100 coins + 50 energy per user!'}
+                </p>
+              </div>
+            </div>
+            {ambassadorExpanded ? (
+              <ChevronUp className="w-5 h-5 text-white shrink-0" />
+            ) : (
+              <ChevronDown className="w-5 h-5 text-white shrink-0" />
+            )}
+          </button>
+
+          {/* Expandable Content */}
+          {ambassadorExpanded && (
+            <div className="px-5 pb-5 space-y-4 border-t border-white/10">
+              {/* Benefits */}
+              <div className="space-y-2 pt-4">
+                <div className="flex items-center gap-2 text-sm">
+                  <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                    <Check className="w-3 h-3" />
+                  </div>
+                  <span><strong>Referral Boss (Free):</strong> Earn 100 coins + 50 energy per Pro conversion</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <div className="w-5 h-5 rounded-full bg-yellow-400 flex items-center justify-center shrink-0">
+                    <Crown className="w-3 h-3 text-yellow-900" />
+                  </div>
+                  <span><strong>Ambassador (Pro):</strong> Earn ₱649.50 + ₱194.85/month per Pro user!</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                    <Check className="w-3 h-3" />
+                  </div>
+                  <span>Personal landing page + QR code</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                    <Check className="w-3 h-3" />
+                  </div>
+                  <span>Real-time analytics dashboard</span>
+                </div>
+              </div>
+
+              {/* Example Earnings */}
+              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3">
+                <p className="text-xs text-white/80 mb-2 font-semibold">💡 Example: 10 Pro Referrals</p>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-white/70">Referral Boss:</p>
+                    <p className="font-bold">1,000 coins + 500 energy</p>
+                  </div>
+                  <div>
+                    <p className="text-white/70">Ambassador (Pro):</p>
+                    <p className="font-bold text-yellow-300">₱6,495 + ₱1,949/mo!</p>
+                    <p className="text-xs text-green-300">≈₱30k/year passive!</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Referral Link (If Already a Referral Boss/Ambassador) */}
+              {ambassadorData?.referral_code && (
+                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 mb-3">
+                  <p className="text-xs text-white/80 mb-2 font-semibold">📱 Your Referral Link</p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 bg-white/20 px-3 py-2 rounded text-xs font-mono text-white truncate">
+                      {window.location.origin}/signup?ref={ambassadorData.referral_code}
+                    </code>
+                    <button
+                      onClick={handleCopyReferralLink}
+                      className="p-2 bg-white/20 hover:bg-white/30 rounded transition-colors shrink-0"
+                    >
+                      {copiedReferralLink ? (
+                        <Check className="w-4 h-4 text-green-300" />
+                      ) : (
+                        <Copy className="w-4 h-4 text-white" />
+                      )}
+                    </button>
+                  </div>
+                  {copiedReferralLink && (
+                    <p className="text-xs text-green-300 mt-2 animate-fade-in">✅ Link copied! Share it to earn!</p>
+                  )}
+                </div>
+              )}
+
+              <button
+                onClick={() => {
+                  if (onNavigate) {
+                    onNavigate('ambassador');
+                  } else {
+                    window.location.href = '/ambassador';
+                  }
+                }}
+                className="w-full bg-white text-[#1877F2] py-3 rounded-lg font-bold hover:bg-gray-100 transition-colors flex items-center justify-center gap-2"
+              >
+                <Share2 className="w-4 h-4" />
+                {ambassadorData 
+                  ? 'View Full Dashboard' 
+                  : (profile?.subscription_tier === 'pro' 
+                    ? 'Join The Ambassador Referral Program' 
+                    : 'Start as Referral Boss')}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Recent Activity with Filters */}
         <div className="bg-white rounded-lg shadow-sm">
+          {/* Header with Filter Toggle */}
           <div className="px-4 py-3 border-b border-gray-100">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-semibold text-gray-900">Recent Activity</h3>
-              <Clock className="w-4 h-4 text-gray-400" />
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors text-sm"
+              >
+                <Filter className="w-4 h-4 text-gray-600" />
+                <span className="text-xs font-medium text-gray-700">Filters</span>
+              </button>
+            </div>
+
+            {/* Search Bar */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search transactions..."
+                value={searchTerm}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className="w-full pl-10 pr-10 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => {
+                    setSearchTerm('');
+                    loadWalletData();
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2"
+                >
+                  <X className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+                </button>
+              )}
             </div>
           </div>
 
+          {/* Filters Panel */}
+          {showFilters && (
+            <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 space-y-3">
+              {/* Type Filter */}
+              <div>
+                <label className="text-xs font-medium text-gray-700 mb-2 block">Transaction Type</label>
+                <div className="flex flex-wrap gap-2">
+                  {['all', 'earned', 'spent', 'purchased', 'bonus', 'ad_reward'].map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => handleTypeFilterChange(type as typeof typeFilter)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        typeFilter === type
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-100'
+                      }`}
+                    >
+                      {type === 'all' ? 'All' :
+                       type === 'earned' ? '💰 Earned' :
+                       type === 'spent' ? '💸 Spent' :
+                       type === 'purchased' ? '🛒 Purchased' :
+                       type === 'bonus' ? '🎁 Bonus' :
+                       '📺 Ad Reward'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Date Filter */}
+              <div>
+                <label className="text-xs font-medium text-gray-700 mb-2 block">Date Range</label>
+                <div className="flex flex-wrap gap-2">
+                  {['all', 'today', 'week', 'month'].map((range) => (
+                    <button
+                      key={range}
+                      onClick={() => handleDateFilterChange(range as typeof dateFilter)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        dateFilter === range
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-100'
+                      }`}
+                    >
+                      {range === 'all' ? 'All Time' :
+                       range === 'today' ? 'Today' :
+                       range === 'week' ? 'This Week' :
+                       'This Month'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Clear Filters */}
+              {(typeFilter !== 'all' || dateFilter !== 'all' || searchTerm) && (
+                <button
+                  onClick={clearFilters}
+                  className="w-full px-3 py-2 bg-gray-200 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-300 transition-colors"
+                >
+                  Clear All Filters
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Transaction List */}
           <div className="divide-y divide-gray-100">
             {loading ? (
               <div className="p-8 text-center">
@@ -308,35 +586,62 @@ export default function WalletPage({ onBack, onNavigateToPurchase, onNavigate, o
             ) : transactions.length === 0 ? (
               <div className="p-8 text-center">
                 <Wallet className="w-12 h-12 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">No transactions yet</p>
+                <p className="text-sm text-gray-500">
+                  {searchTerm || typeFilter !== 'all' || dateFilter !== 'all' 
+                    ? 'No transactions match your filters' 
+                    : 'No transactions yet'}
+                </p>
+                {(searchTerm || typeFilter !== 'all' || dateFilter !== 'all') && (
+                  <button
+                    onClick={clearFilters}
+                    className="mt-3 text-xs text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    Clear filters
+                  </button>
+                )}
               </div>
             ) : (
-              transactions.slice(0, 8).map((tx) => (
-                <div key={tx.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-                        tx.amount > 0 ? 'bg-green-100' : 'bg-red-100'
+              <>
+                {transactions.map((tx) => (
+                  <div key={tx.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                          tx.amount > 0 ? 'bg-green-100' : 'bg-red-100'
+                        }`}>
+                          <span className="text-lg">{getTypeIcon(tx.transaction_type)}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {tx.description || getTypeLabel(tx.transaction_type)}
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs text-gray-500">{formatDate(tx.created_at)}</p>
+                            <span className="text-xs text-gray-400">•</span>
+                            <span className={`text-xs font-medium ${
+                              tx.amount > 0 ? 'text-green-600' : 'text-red-600'
+                            }`}>
+                              {getTypeLabel(tx.transaction_type)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <p className={`text-sm font-bold ml-2 flex-shrink-0 ${
+                        tx.amount > 0 ? 'text-green-600' : 'text-red-600'
                       }`}>
-                        <TrendingUp className={`w-5 h-5 ${
-                          tx.amount > 0 ? 'text-green-600' : 'text-red-600 rotate-180'
-                        }`} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">
-                          {tx.description || tx.transaction_type}
-                        </p>
-                        <p className="text-xs text-gray-500">{formatDate(tx.created_at)}</p>
-                      </div>
+                        {tx.amount > 0 ? '+' : ''}{tx.amount}
+                      </p>
                     </div>
-                    <p className={`text-sm font-bold ml-2 flex-shrink-0 ${
-                      tx.amount > 0 ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      {tx.amount > 0 ? '+' : ''}{tx.amount}
-                    </p>
                   </div>
+                ))}
+                
+                {/* Results Count */}
+                <div className="px-4 py-2 bg-gray-50 text-center">
+                  <p className="text-xs text-gray-500">
+                    Showing {transactions.length} transaction{transactions.length !== 1 ? 's' : ''}
+                  </p>
                 </div>
-              ))
+              </>
             )}
           </div>
         </div>

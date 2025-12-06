@@ -1,3 +1,15 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Production builds
+dist/
+dist-ssr/
+build/
+*.local
+
+# Logs
 logs
 *.log
 npm-debug.log*
@@ -6,11 +18,14 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# Environment variables (CRITICAL - Never commit these!)
+.env
+.env.local
+.env.production
+.env.development
+.env.*.local
 
+# Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
@@ -20,4 +35,36 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-.env
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Archives (if any)
+*.zip
+*.tar.gz
+dist.zip
+
+# Backup files
+*.backup
+*.bak
+*.old
+
+# Cache
+.cache/
+.parcel-cache/
+.eslintcache
+
+# Optional: Uncomment if you want to exclude documentation files
+# *.md
+# !README.md

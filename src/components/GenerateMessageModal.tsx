@@ -188,7 +188,7 @@ export default function GenerateMessageModal({
               ) : (
                 <>
                   <Sparkles className="w-5 h-5" />
-                  <span>Generate Message (20 coins)</span>
+                  <span>Generate Message (3 coins)</span>
                 </>
               )}
             </button>

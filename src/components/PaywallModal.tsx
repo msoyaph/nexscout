@@ -21,7 +21,7 @@ export default function PaywallModal({
   if (!isOpen) return null;
 
   const pricing = TIER_PRICING[requiredTier];
-  const isElite = requiredTier === SUBSCRIPTION_TIERS.ELITE;
+  const isPro = requiredTier === SUBSCRIPTION_TIERS.PRO;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -39,7 +39,7 @@ export default function PaywallModal({
         </button>
 
         <div className={`relative p-8 ${
-          isElite
+          isPro
             ? 'bg-gradient-to-br from-purple-500 via-pink-500 to-purple-600'
             : 'bg-gradient-to-br from-blue-500 to-blue-600'
         }`}>
@@ -65,7 +65,7 @@ export default function PaywallModal({
           <div className="space-y-3">
             <div className="flex items-start gap-3">
               <div className={`size-8 rounded-full flex items-center justify-center shrink-0 ${
-                isElite ? 'bg-gradient-to-br from-purple-100 to-pink-100' : 'bg-blue-100'
+                isPro ? 'bg-gradient-to-br from-purple-100 to-pink-100' : 'bg-blue-100'
               }`}>
                 <Zap className={`size-4 ${isElite ? 'text-purple-600' : 'text-blue-600'}`} />
               </div>
@@ -111,7 +111,7 @@ export default function PaywallModal({
           </div>
 
           <div className={`rounded-[20px] p-4 ${
-            isElite
+            isPro
               ? 'bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200'
               : 'bg-blue-50 border border-blue-200'
           }`}>
@@ -133,7 +133,7 @@ export default function PaywallModal({
                 onClose();
               }}
               className={`w-full py-4 rounded-[20px] font-bold text-white shadow-lg hover:shadow-xl transition-all ${
-                isElite
+                isPro
                   ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700'
                   : 'bg-blue-600 hover:bg-blue-700'
               }`}

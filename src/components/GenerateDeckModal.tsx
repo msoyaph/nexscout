@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Sparkles, Loader2, Download, Share2, ChevronLeft, ChevronRight, Lock, Upload, FileText, Globe, Database } from 'lucide-react';
+import { X, Sparkles, Loader2, Download, Share2, ChevronLeft, ChevronRight, Lock, Upload, FileText, Globe, Database, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { messagingEngine } from '../services/ai/messagingEngine';
 import TierBadge from './TierBadge';
@@ -32,6 +32,8 @@ export default function GenerateDeckModal({
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [useCompanyData, setUseCompanyData] = useState(false);
   const [hasCompanyData, setHasCompanyData] = useState(false);
+  const [showMaterials, setShowMaterials] = useState(false);
+  const [showWebsite, setShowWebsite] = useState(false);
 
   useEffect(() => {
     checkCompanyData();
@@ -59,8 +61,8 @@ export default function GenerateDeckModal({
       return;
     }
 
-    if (version === 'elite' && userTier !== 'elite') {
-      setError('Advanced pitch decks are only available for Elite subscribers.');
+    if (version === 'elite' && userTier !== 'pro') {
+      setError('Advanced pitch decks are only available for Pro subscribers.');
       return;
     }
 
@@ -157,97 +159,131 @@ export default function GenerateDeckModal({
 
               <div className="space-y-4">
                 {hasCompanyData && (
-                  <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-2xl p-5 border-2 border-blue-200">
+                  <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-2xl p-5 border-2 border-purple-200">
                     <label className="flex items-start gap-4 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={useCompanyData}
                         onChange={(e) => setUseCompanyData(e.target.checked)}
-                        className="mt-1 w-5 h-5 rounded border-blue-400 text-blue-600 focus:ring-blue-500"
+                        className="mt-1 w-5 h-5 rounded border-purple-400 text-purple-600 focus:ring-purple-500"
                       />
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
-                          <Database className="w-5 h-5 text-blue-600" />
+                          <Sparkles className="w-5 h-5 text-purple-600" />
                           <span className="font-semibold text-slate-900 text-base">
-                            Use Your Company's Data
+                            Use AI System Instructions
                           </span>
                         </div>
                         <p className="text-sm text-slate-700">
-                          Use data you've already uploaded and processed by the Company Intelligence Engine (your company profile, materials, brand voice, products, and AI-learned insights)
+                          Use your custom AI instructions and company intelligence data (company profile, materials, brand voice, products, images, and AI-learned insights)
                         </p>
                       </div>
                     </label>
                   </div>
                 )}
 
-                <div className="flex items-center justify-between">
-                  <label className="block text-sm font-medium text-gray-700">
-                    Company Materials (Optional)
-                  </label>
-                  <span className="text-xs text-purple-600 font-medium">Highly Recommended!</span>
-                </div>
+                {/* Collapsible Company Materials */}
+                <div className="border border-gray-200 rounded-2xl overflow-hidden">
+                  <button
+                    onClick={() => setShowMaterials(!showMaterials)}
+                    type="button"
+                    className="w-full px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-700">
+                        Company Materials (Optional)
+                      </span>
+                      <span className="text-xs text-purple-600 font-medium px-2 py-0.5 bg-purple-100 rounded-full">Recommended</span>
+                    </div>
+                    {showMaterials ? (
+                      <ChevronUp className="w-5 h-5 text-gray-400" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5 text-gray-400" />
+                    )}
+                  </button>
 
-                <div className="grid gap-3">
-                  <div className="border-2 border-dashed border-gray-300 rounded-2xl p-6 hover:border-purple-400 transition-colors cursor-pointer bg-gradient-to-br from-white to-purple-50">
-                    <input
-                      type="file"
-                      accept=".pdf,.ppt,.pptx,.doc,.docx,image/*"
-                      multiple
-                      onChange={(e) => {
-                        const files = Array.from(e.target.files || []);
-                        setUploadedFiles([...uploadedFiles, ...files]);
-                      }}
-                      className="hidden"
-                      id="company-files"
-                    />
-                    <label htmlFor="company-files" className="cursor-pointer">
-                      <div className="text-center">
-                        <Upload className="w-8 h-8 text-purple-500 mx-auto mb-3" />
-                        <p className="font-semibold text-gray-900 mb-1">
-                          Upload Company Presentation or Brochure
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          PDF, PowerPoint, or images • Creates branded, accurate pitch decks
-                        </p>
+                  {showMaterials && (
+                    <div className="p-4 space-y-3 border-t border-gray-200">
+                      <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 hover:border-purple-400 transition-colors cursor-pointer bg-gradient-to-br from-white to-purple-50">
+                        <input
+                          type="file"
+                          accept=".pdf,.ppt,.pptx,.doc,.docx,image/*"
+                          multiple
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files || []);
+                            setUploadedFiles([...uploadedFiles, ...files]);
+                          }}
+                          className="hidden"
+                          id="company-files"
+                        />
+                        <label htmlFor="company-files" className="cursor-pointer">
+                          <div className="text-center">
+                            <Upload className="w-8 h-8 text-purple-500 mx-auto mb-3" />
+                            <p className="font-semibold text-gray-900 mb-1">
+                              Upload Company Presentation or Brochure
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              PDF, PowerPoint, or images • Creates branded, accurate pitch decks
+                            </p>
+                          </div>
+                        </label>
                       </div>
-                    </label>
-                  </div>
 
-                  {uploadedFiles.length > 0 && (
-                    <div className="space-y-2">
-                      {uploadedFiles.map((file, index) => (
-                        <div key={index} className="flex items-center gap-3 bg-green-50 rounded-xl p-3 border border-green-200">
-                          <FileText className="w-5 h-5 text-green-600" />
-                          <span className="text-sm font-medium text-gray-900 flex-1">{file.name}</span>
-                          <button
-                            onClick={() => setUploadedFiles(uploadedFiles.filter((_, i) => i !== index))}
-                            className="text-gray-400 hover:text-red-600"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
+                      {uploadedFiles.length > 0 && (
+                        <div className="space-y-2">
+                          {uploadedFiles.map((file, index) => (
+                            <div key={index} className="flex items-center gap-3 bg-green-50 rounded-xl p-3 border border-green-200">
+                              <FileText className="w-5 h-5 text-green-600" />
+                              <span className="text-sm font-medium text-gray-900 flex-1">{file.name}</span>
+                              <button
+                                onClick={() => setUploadedFiles(uploadedFiles.filter((_, i) => i !== index))}
+                                type="button"
+                                className="text-gray-400 hover:text-red-600"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      )}
                     </div>
                   )}
+                </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Add your company website
-                    </label>
-                    <div className="relative">
-                      <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                      <input
-                        type="url"
-                        value={companyWebsite}
-                        onChange={(e) => setCompanyWebsite(e.target.value)}
-                        placeholder="https://yourcompany.com"
-                        className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                      />
+                {/* Collapsible Company Website */}
+                <div className="border border-gray-200 rounded-2xl overflow-hidden">
+                  <button
+                    onClick={() => setShowWebsite(!showWebsite)}
+                    type="button"
+                    className="w-full px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center justify-between"
+                  >
+                    <span className="text-sm font-medium text-gray-700">
+                      Add your company website (Optional)
+                    </span>
+                    {showWebsite ? (
+                      <ChevronUp className="w-5 h-5 text-gray-400" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5 text-gray-400" />
+                    )}
+                  </button>
+
+                  {showWebsite && (
+                    <div className="p-4 border-t border-gray-200">
+                      <div className="relative">
+                        <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                        <input
+                          type="url"
+                          value={companyWebsite}
+                          onChange={(e) => setCompanyWebsite(e.target.value)}
+                          placeholder="https://yourcompany.com"
+                          className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        AI will extract your company story, products, and brand automatically
+                      </p>
                     </div>
-                    <p className="text-xs text-gray-500 mt-2">
-                      AI will extract your company story, products, and brand automatically
-                    </p>
-                  </div>
+                  )}
                 </div>
 
                 {(useCompanyData || uploadedFiles.length > 0 || companyWebsite) && (
@@ -258,11 +294,11 @@ export default function GenerateDeckModal({
                       </div>
                       <div>
                         <p className="text-sm font-semibold text-green-900 mb-1">
-                          {useCompanyData ? 'Using your Company Intelligence data!' : 'Great! Your AI is now supercharged!'}
+                          {useCompanyData ? 'Using AI System Instructions!' : 'Great! Your AI is now supercharged!'}
                         </p>
                         <p className="text-xs text-green-800">
                           {useCompanyData
-                            ? 'Your pitch deck will use all your saved company data, brand voice, and AI insights.'
+                            ? 'Your pitch deck will use custom AI instructions, company data, brand voice, and all AI insights.'
                             : 'Your pitch deck will be customized with YOUR exact company data, products, and brand voice.'}
                         </p>
                       </div>
@@ -291,22 +327,22 @@ export default function GenerateDeckModal({
 
                   <button
                     onClick={() => setVersion('elite')}
-                    disabled={userTier !== 'elite'}
+                    disabled={userTier !== 'pro'}
                     className={`p-4 rounded-2xl border-2 transition-all text-left relative ${
                       version === 'elite'
                         ? 'border-yellow-500 bg-yellow-50'
                         : 'border-gray-200 hover:border-gray-300'
-                    } ${userTier !== 'elite' ? 'opacity-60' : ''}`}
+                    } ${userTier !== 'pro' ? 'opacity-60' : ''}`}
                   >
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-gray-900">Advanced</span>
-                        <TierBadge tier="elite" />
+                        <TierBadge tier="pro" />
                       </div>
                       <span className="text-xs text-yellow-600 font-medium">75 coins</span>
                     </div>
                     <p className="text-sm text-gray-600">Enhanced 10-slide deck with data</p>
-                    {userTier !== 'elite' && (
+                    {userTier !== 'pro' && (
                       <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-80 rounded-2xl">
                         <Lock className="w-6 h-6 text-gray-400" />
                       </div>

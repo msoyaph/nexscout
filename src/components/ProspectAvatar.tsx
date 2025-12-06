@@ -83,7 +83,7 @@ export default function ProspectAvatar({
 
   // Get glow effect for Elite users
   const getGlowClass = () => {
-    if (userTier !== 'elite') return '';
+    if (userTier !== 'pro') return '';
 
     switch (determinedBucket) {
       case 'hot':
@@ -161,7 +161,7 @@ export default function ProspectAvatar({
 
   // Get AI sparkle for Elite users
   const getEliteSparkle = () => {
-    if (userTier !== 'elite' || !showBadges) return null;
+    if (userTier !== 'pro' || !showBadges) return null;
 
     return (
       <div className="absolute -top-1 -left-1 w-4 h-4 bg-gradient-to-br from-amber-400 to-amber-600 rounded-full border border-white flex items-center justify-center shadow-lg animate-pulse">

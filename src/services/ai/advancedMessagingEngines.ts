@@ -65,7 +65,7 @@ class AdvancedMessagingEnginesService {
     const context = await this.getProspectContext(prospectId, userId);
     const tier = await this.getUserTier(userId);
 
-    const revival = this.buildRevivalMessage(context, lastInteractionDays, industry, userGoal, tier === 'elite');
+    const revival = this.buildRevivalMessage(context, lastInteractionDays, industry, userGoal, tier === 'pro');
 
     await supabase.from('lead_revival_messages').insert({
       user_id: userId,
@@ -186,7 +186,7 @@ class AdvancedMessagingEnginesService {
     const tier = await this.getUserTier(userId);
     const prospectContext = prospectId ? await this.getProspectContext(prospectId, userId) : null;
 
-    const referral = this.buildReferralMessage(prospectContext?.name || 'Friend', context, industry, tone, rewardType, tier === 'elite');
+    const referral = this.buildReferralMessage(prospectContext?.name || 'Friend', context, industry, tone, rewardType, tier === 'pro');
 
     await supabase.from('referral_messages').insert({
       user_id: userId,
@@ -353,7 +353,7 @@ class AdvancedMessagingEnginesService {
     const context = await this.getProspectContext(prospectId, userId);
     const tier = await this.getUserTier(userId);
 
-    const script = this.buildCallScript(context, goal, industry, tone, tier === 'elite');
+    const script = this.buildCallScript(context, goal, industry, tone, tier === 'pro');
 
     await supabase.from('call_scripts').insert({
       user_id: userId,

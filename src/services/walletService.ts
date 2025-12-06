@@ -47,7 +47,9 @@ export const walletService = {
   async getTransactionHistory(
     userId: string,
     limit: number = 50,
-    filter?: 'all' | 'earned' | 'spent' | 'purchased'
+    filter?: 'all' | 'earned' | 'spent' | 'purchased' | 'bonus' | 'ad_reward',
+    dateRange?: { start: Date; end: Date },
+    searchTerm?: string
   ): Promise<CoinTransaction[]> {
     let query = supabase
       .from('coin_transactions')
@@ -56,18 +58,42 @@ export const walletService = {
       .order('created_at', { ascending: false })
       .limit(limit);
 
+    // Type filter
     if (filter === 'earned') {
       query = query.in('transaction_type', ['earn', 'bonus', 'ad_reward']);
     } else if (filter === 'spent') {
       query = query.eq('transaction_type', 'spend');
     } else if (filter === 'purchased') {
       query = query.eq('transaction_type', 'purchase');
+    } else if (filter === 'bonus') {
+      query = query.eq('transaction_type', 'bonus');
+    } else if (filter === 'ad_reward') {
+      query = query.eq('transaction_type', 'ad_reward');
+    }
+
+    // Date range filter
+    if (dateRange) {
+      query = query
+        .gte('created_at', dateRange.start.toISOString())
+        .lte('created_at', dateRange.end.toISOString());
     }
 
     const { data, error } = await query;
 
     if (error) throw error;
-    return data || [];
+    
+    let results = data || [];
+
+    // Search filter (client-side for description)
+    if (searchTerm && searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      results = results.filter(tx => 
+        tx.description?.toLowerCase().includes(term) ||
+        tx.transaction_type?.toLowerCase().includes(term)
+      );
+    }
+
+    return results;
   },
 
   async getWalletStats(userId: string): Promise<WalletStats> {

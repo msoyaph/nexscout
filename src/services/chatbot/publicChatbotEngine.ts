@@ -10,6 +10,7 @@ import { buildClosingResponse, type ClosingContext, type ClosingResponse } from 
 import { analyzeLeadTemperature, type LeadTemperature, type LeadSignals } from '../../engines/leads/leadTemperatureModel';
 import { suggestOffer, type Product, type UpsellContext, type OfferSuggestion } from '../../engines/upsell/upsellDownsellEngine';
 import { ChatbotProspectCreationService, type ContactInfo, type ChatQualificationData } from './chatbotProspectCreation';
+import { aiOrchestrator } from '../ai/AIOrchestrator';
 
 interface ChatMessage {
   sender: 'visitor' | 'ai';
@@ -570,38 +571,28 @@ Lead Temperature: ${this.leadTemperatureModel.toUpperCase()} (Score: ${this.lead
 
     console.log('[PublicChatbot] Using prompt with strategy:', suggestedStrategy);
 
-    // Call OpenAI with unified prompt
+    // Call AIOrchestrator (centralized AI system with energy tracking, retry logic, etc.)
     try {
-      const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-      if (!apiKey) {
-        throw new Error('OpenAI API key not configured');
-      }
-
-      const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
+      const result = await aiOrchestrator.generate({
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        config: {
+          userId: this.userId,
+          action: 'ai_chatbot_response',
           model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
           temperature: 0.7,
-          max_tokens: 500
-        })
+          maxTokens: 500,
+          autoSelectModel: true, // Auto-downgrade if low energy
+        }
       });
 
-      if (!openaiResponse.ok) {
-        const errorData = await openaiResponse.json();
-        console.error('[PublicChatbot] OpenAI API error:', errorData);
-        throw new Error(`OpenAI API error: ${errorData.error?.message || 'Unknown error'}`);
+      if (!result.success || !result.content) {
+        throw new Error(result.error || 'AI generation failed');
       }
 
-      const data = await openaiResponse.json();
-      const aiResponse = data.choices?.[0]?.message?.content || 'I apologize, I am having trouble responding right now. Please try again.';
+      const aiResponse = result.content;
 
       // Determine suggested action based on intent + stage
       if (intent === 'ready_to_buy' || funnelStage === 'closing') {

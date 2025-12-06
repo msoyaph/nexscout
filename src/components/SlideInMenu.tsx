@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Coins, Plus, User, List, Wallet, Gift, FileText, MessageSquare, Bell, CheckSquare, Calendar, CreditCard, Settings, TrendingUp, GraduationCap, Database, Bot, MessagesSquare, Camera, Package, Sparkles } from 'lucide-react';
+import { X, Coins, Plus, User, List, Wallet, Gift, FileText, MessageSquare, Bell, CheckSquare, Calendar, CreditCard, Settings, TrendingUp, GraduationCap, Database, Bot, MessagesSquare, Camera, Package, Sparkles, Lock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import ProspectAvatar from './ProspectAvatar';
@@ -12,6 +12,10 @@ interface SlideInMenuProps {
 
 export default function SlideInMenu({ isOpen, onClose, onNavigate }: SlideInMenuProps) {
   const { profile, user, refreshProfile } = useAuth();
+  
+  // SuperAdmin access for development
+  const isSuperAdmin = user?.email === 'geoffmax22@gmail.com';
+  
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [showImageUpload, setShowImageUpload] = useState(false);
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
@@ -101,19 +105,84 @@ export default function SlideInMenu({ isOpen, onClose, onNavigate }: SlideInMenu
   ];
 
   const menuItems = [
-    { icon: Bot, label: 'AI Sales Assistant', page: 'ai-chatbot' },
-    { icon: Package, label: 'My Products', page: 'products-list', badge: 'NEW' },
-    { icon: Database, label: 'AI Scan Records', page: 'scan-library' },
-    { icon: FileText, label: 'AI Pitch Decks', page: 'pitch-decks' },
-    { icon: MessageSquare, label: 'AI Messages', page: 'messages' },
-    { icon: Wallet, label: 'Wallet', page: 'wallet' },
-    { icon: Gift, label: 'Missions & Rewards', page: 'missions' },
-    { icon: Bell, label: 'Reminders', page: 'reminders' },
-    { icon: CheckSquare, label: 'To-Dos', page: 'todos' },
-    { icon: Calendar, label: 'Calendar', page: 'calendar' },
-    { icon: GraduationCap, label: 'Training Hub', page: 'training-hub' },
-    { icon: CreditCard, label: 'Subscription', page: 'subscription' },
-    { icon: Settings, label: 'Settings', page: 'settings' },
+    { 
+      icon: Bot, 
+      label: 'AI Sales Assistant', 
+      page: 'ai-chatbot',
+      locked: !isSuperAdmin,
+      lockedText: 'Coming Soon'
+    },
+    { 
+      icon: Package, 
+      label: 'My Products', 
+      page: 'products-list', 
+      badge: 'NEW',
+      hidden: !isSuperAdmin
+    },
+    { 
+      icon: Database, 
+      label: 'AI Scan Records', 
+      page: 'scan-library',
+      hidden: !isSuperAdmin
+    },
+    { 
+      icon: FileText, 
+      label: 'AI Pitch Decks', 
+      page: 'pitch-decks',
+      locked: !isSuperAdmin,
+      lockedText: 'Coming Soon'
+    },
+    { 
+      icon: MessageSquare, 
+      label: 'AI Messages', 
+      page: 'messages' 
+    },
+    { 
+      icon: Wallet, 
+      label: 'Wallet', 
+      page: 'wallet' 
+    },
+    { 
+      icon: Gift, 
+      label: 'Missions & Rewards', 
+      page: 'missions',
+      locked: !isSuperAdmin,
+      lockedText: 'Coming Soon'
+    },
+    { 
+      icon: Bell, 
+      label: 'Reminders', 
+      page: 'reminders' 
+    },
+    { 
+      icon: CheckSquare, 
+      label: 'To-Dos', 
+      page: 'todos' 
+    },
+    { 
+      icon: Calendar, 
+      label: 'Calendar', 
+      page: 'calendar',
+      locked: profile?.subscription_tier !== 'pro',
+      lockedText: 'PRO users'
+    },
+    { 
+      icon: GraduationCap, 
+      label: 'Training Hub', 
+      page: 'training-hub',
+      locked: !isSuperAdmin,
+      lockedText: 'Coming Soon'
+    },
+    { 
+      icon: CreditCard, 
+      label: 'Subscription', 
+      page: 'subscription' 
+    },
+    { 
+      icon: Settings, 
+      label: 'Settings', 
+      page: 'settings' 
+    },
   ];
 
   const handleMenuClick = (page: string) => {
@@ -236,18 +305,53 @@ export default function SlideInMenu({ isOpen, onClose, onNavigate }: SlideInMenu
             <div className="border-t border-gray-200 pt-4 mt-4">
               <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2">Main Menu</h3>
               <div className="space-y-1">
-                {menuItems.map((item) => (
+                {menuItems
+                  .filter((item) => !item.hidden) // Hide items marked as hidden
+                  .map((item) => (
                   <button
                     key={item.page}
-                    onClick={() => handleMenuClick(item.page)}
-                    className="w-full flex items-center gap-3 p-4 rounded-xl hover:bg-gray-50 transition-colors text-left group"
+                    onClick={() => {
+                      if (!item.locked) {
+                        handleMenuClick(item.page);
+                      }
+                    }}
+                    disabled={item.locked}
+                    className={`w-full flex items-center gap-3 p-4 rounded-xl transition-colors text-left group relative ${
+                      item.locked 
+                        ? 'opacity-60 cursor-not-allowed' 
+                        : 'hover:bg-gray-50'
+                    }`}
                   >
-                    <div className="size-10 rounded-full bg-gray-100 flex items-center justify-center group-hover:bg-nexscout-blue/10 transition-colors">
-                      <item.icon className="size-5 text-gray-600 group-hover:text-nexscout-blue transition-colors" />
+                    <div className={`size-10 rounded-full flex items-center justify-center transition-colors ${
+                      item.locked 
+                        ? 'bg-gray-100' 
+                        : 'bg-gray-100 group-hover:bg-nexscout-blue/10'
+                    }`}>
+                      {item.locked ? (
+                        <Lock className="size-5 text-gray-400" />
+                      ) : (
+                        <item.icon className="size-5 text-gray-600 group-hover:text-nexscout-blue transition-colors" />
+                      )}
                     </div>
-                    <span className="text-sm font-medium text-gray-900 group-hover:text-nexscout-blue transition-colors">
-                      {item.label}
-                    </span>
+                    <div className="flex-1 flex items-center justify-between">
+                      <span className={`text-sm font-medium transition-colors ${
+                        item.locked 
+                          ? 'text-gray-500' 
+                          : 'text-gray-900 group-hover:text-nexscout-blue'
+                      }`}>
+                        {item.label}
+                      </span>
+                      {item.locked && item.lockedText && (
+                        <span className="text-[10px] text-gray-400 font-medium">
+                          {item.lockedText}
+                        </span>
+                      )}
+                      {item.badge && !item.locked && (
+                        <span className="px-2 py-0.5 bg-blue-600 text-white text-[10px] font-bold rounded-full">
+                          {item.badge}
+                        </span>
+                      )}
+                    </div>
                   </button>
                 ))}
               </div>

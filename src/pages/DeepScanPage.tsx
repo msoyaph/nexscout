@@ -12,6 +12,23 @@ export default function DeepScanPage({ onBack, onNavigate, prospect }: DeepScanP
   const { profile } = useAuth();
   const isPro = profile?.subscription_tier === 'pro';
 
+  // Handle missing prospect
+  if (!prospect) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600 mb-4">Prospect data not available</p>
+          <button
+            onClick={onBack}
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const deepScanData = {
     personality: {
       extrovert: 75,
@@ -65,7 +82,7 @@ export default function DeepScanPage({ onBack, onNavigate, prospect }: DeepScanP
                   <Lock className="size-12 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-3xl font-bold text-gray-900 mb-3">Elite Feature</h2>
+                  <h2 className="text-3xl font-bold text-gray-900 mb-3">Pro Feature</h2>
                   <p className="text-gray-700 mb-6">
                     DeepScan provides comprehensive AI personality profiling, buying behavior analysis, and advanced closing strategies.
                   </p>
@@ -74,10 +91,10 @@ export default function DeepScanPage({ onBack, onNavigate, prospect }: DeepScanP
                   onClick={() => onNavigate('pricing')}
                   className="px-8 py-4 bg-gradient-to-r from-amber-400 to-amber-600 text-white rounded-full font-bold text-lg shadow-lg hover:shadow-xl transition-all"
                 >
-                  Upgrade to Elite
+                  Upgrade to Pro
                 </button>
                 <p className="text-sm text-gray-600">
-                  Join Elite to unlock full DeepScan insights for all prospects
+                  Join Pro to unlock full DeepScan insights for all prospects
                 </p>
               </div>
             </div>

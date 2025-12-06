@@ -1,10 +1,13 @@
 import { ArrowLeft, FileText, Shield, Users, AlertCircle } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 interface TermsOfServicePageProps {
   onNavigateBack: () => void;
 }
 
 export default function TermsOfServicePage({ onNavigateBack }: TermsOfServicePageProps) {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.email === 'geoffmax22@gmail.com';
   return (
     <div className="bg-gray-50 min-h-screen text-gray-900 pb-28">
       <header className="px-6 pt-8 pb-6 bg-white shadow-sm">
@@ -202,22 +205,24 @@ export default function TermsOfServicePage({ onNavigateBack }: TermsOfServicePag
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-[24px] p-6 border-2 border-orange-200">
-          <div className="flex items-start gap-4">
-            <AlertCircle className="size-6 text-orange-600 shrink-0 mt-1" />
-            <div className="flex-1">
-              <h3 className="font-bold text-lg text-[#111827] mb-2">Contact Information</h3>
-              <p className="text-sm text-[#6B7280] mb-2">
-                If you have questions about these Terms of Service, please contact us:
-              </p>
-              <div className="space-y-1 text-sm text-[#6B7280]">
-                <p>Email: legal@company.com</p>
-                <p>Phone: +63 2 8888 8888</p>
-                <p>Address: 123 Business Street, Makati City, Metro Manila, Philippines</p>
+        {isSuperAdmin && (
+          <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-[24px] p-6 border-2 border-orange-200">
+            <div className="flex items-start gap-4">
+              <AlertCircle className="size-6 text-orange-600 shrink-0 mt-1" />
+              <div className="flex-1">
+                <h3 className="font-bold text-lg text-[#111827] mb-2">Contact Information</h3>
+                <p className="text-sm text-[#6B7280] mb-2">
+                  If you have questions about these Terms of Service, please contact us:
+                </p>
+                <div className="space-y-1 text-sm text-[#6B7280]">
+                  <p>Email: legal@company.com</p>
+                  <p>Phone: +63 2 8888 8888</p>
+                  <p>Address: 123 Business Street, Makati City, Metro Manila, Philippines</p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
       </main>
     </div>
   );

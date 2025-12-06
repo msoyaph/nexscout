@@ -55,7 +55,7 @@ export default function CompanySuccess({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const shareBonus = userTier === 'elite' ? 100 : userTier === 'pro' ? 50 : 20;
+  const shareBonus = userTier === 'pro' ? 100 : 20;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 flex items-center justify-center p-4 relative overflow-hidden">

@@ -89,7 +89,7 @@ export default function CancellationAnalyticsPage({ onBack }: CancellationAnalyt
 
     const tierPrices: Record<string, number> = {
       pro: 249,
-      elite: 499,
+      // elite: 499, // Elite removed
       team: 1990,
       enterprise: 4990
     };

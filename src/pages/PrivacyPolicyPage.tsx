@@ -1,10 +1,13 @@
 import { ArrowLeft, Shield, Eye, Lock, Database, Cookie, Bell, UserCheck } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 interface PrivacyPolicyPageProps {
   onNavigateBack: () => void;
 }
 
 export default function PrivacyPolicyPage({ onNavigateBack }: PrivacyPolicyPageProps) {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.email === 'geoffmax22@gmail.com';
   return (
     <div className="bg-gray-50 min-h-screen text-gray-900 pb-28">
       <header className="px-6 pt-8 pb-6 bg-white shadow-sm">
@@ -300,27 +303,29 @@ export default function PrivacyPolicyPage({ onNavigateBack }: PrivacyPolicyPageP
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-[24px] p-6 border-2 border-blue-200">
-          <div className="flex items-start gap-4">
-            <div className="size-12 rounded-full bg-blue-600 flex items-center justify-center shrink-0">
-              <Shield className="size-6 text-white" />
-            </div>
-            <div className="flex-1">
-              <h3 className="font-bold text-lg text-[#111827] mb-2">Contact Us</h3>
-              <p className="text-sm text-[#6B7280] mb-3">
-                If you have questions, concerns, or requests regarding this Privacy Policy or our data practices, please contact our Data Protection Officer:
-              </p>
-              <div className="space-y-1 text-sm text-[#6B7280]">
-                <p>Email: privacy@company.com</p>
-                <p>Phone: +63 2 8888 8888</p>
-                <p>Address: 123 Business Street, Makati City, Metro Manila, Philippines</p>
+        {isSuperAdmin && (
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-[24px] p-6 border-2 border-blue-200">
+            <div className="flex items-start gap-4">
+              <div className="size-12 rounded-full bg-blue-600 flex items-center justify-center shrink-0">
+                <Shield className="size-6 text-white" />
               </div>
-              <p className="text-xs text-[#9CA3AF] mt-3">
-                Data Protection Officer: compliance@company.com
-              </p>
+              <div className="flex-1">
+                <h3 className="font-bold text-lg text-[#111827] mb-2">Contact Us</h3>
+                <p className="text-sm text-[#6B7280] mb-3">
+                  If you have questions, concerns, or requests regarding this Privacy Policy or our data practices, please contact our Data Protection Officer:
+                </p>
+                <div className="space-y-1 text-sm text-[#6B7280]">
+                  <p>Email: privacy@company.com</p>
+                  <p>Phone: +63 2 8888 8888</p>
+                  <p>Address: 123 Business Street, Makati City, Metro Manila, Philippines</p>
+                </div>
+                <p className="text-xs text-[#9CA3AF] mt-3">
+                  Data Protection Officer: compliance@company.com
+                </p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-[24px] p-6 border border-green-200">
           <p className="text-sm text-[#6B7280] text-center">

@@ -18,12 +18,11 @@ export default function PurchaseCoinsPage({ onBack, onCheckout }: PurchaseCoinsP
   const [selectedPackage, setSelectedPackage] = useState<CoinPackage | null>(null);
 
   const packages: CoinPackage[] = [
-    { id: 'starter', coins: 100, price: 249 },
-    { id: 'basic', coins: 500, price: 999, bonus: 50 },
-    { id: 'popular', coins: 1000, price: 1749, bonus: 150, popular: true },
-    { id: 'pro', coins: 2500, price: 3999, bonus: 500 },
-    { id: 'premium', coins: 5000, price: 7499, bonus: 1000 },
-    { id: 'ultimate', coins: 10000, price: 12499, bonus: 2500 },
+    { id: 'starter', coins: 100, price: 199 }, // Reduced from 249 - lower entry point
+    { id: 'popular', coins: 500, price: 799, bonus: 50, popular: true }, // Reduced from 999 - better value
+    { id: 'value', coins: 1000, price: 1299, bonus: 150 }, // Reduced from 1749 - matches Pro subscription price anchor
+    { id: 'pro', coins: 2500, price: 2999, bonus: 500 }, // Reduced from 3999 - premium but attractive
+    { id: 'ultimate', coins: 5000, price: 4999, bonus: 1000 }, // New! Replaces confusing 5k and 10k tiers
   ];
 
   const handleSelectPackage = (pkg: CoinPackage) => {

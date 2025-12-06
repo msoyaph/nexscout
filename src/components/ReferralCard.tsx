@@ -105,7 +105,7 @@ export default function ReferralCard() {
 
   const getReferralLink = () => {
     if (!stats?.code) return '';
-    const baseUrl = 'https://nexscoutai.com';
+    const baseUrl = import.meta.env.VITE_APP_URL || 'https://nexscout.co';
     return `${baseUrl}/?ref=${stats.code}`;
   };
 

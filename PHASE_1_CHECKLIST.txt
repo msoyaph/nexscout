@@ -1,0 +1,39 @@
+PHASE 1: FOUNDATION - EXECUTION CHECKLIST
+==========================================
+
+[ ] STEP 1: Run SQL (5 min)
+    File: CREATE_INTELLIGENT_PROGRESS_TABLES.sql
+    Action: Copy all → Supabase SQL Editor → Run
+    Verify: Success message appears
+
+[ ] STEP 2: Update Modal (1 hour)
+    File: src/components/ProspectProgressModal.tsx
+    Guide: PHASE_1_MANUAL_STEPS.md
+    Changes: 8 updates (A through H)
+    Verify: No syntax errors in VS Code
+
+[ ] STEP 3: Test (15 min)
+    Action: Hard refresh browser (Cmd+Shift+R)
+    Test: Open Pipeline → Click prospect
+    Verify: Modal shows real data
+
+SUCCESS CRITERIA:
+=================
+✅ SQL tables created
+✅ Service file in src/services/prospects/
+✅ Modal shows loading spinner
+✅ Modal loads real data (not "Engage", not "3 days")
+✅ No console errors
+✅ Metrics are real (or 0s)
+
+FILES LOCATION:
+===============
+All in: /Users/cliffsumalpong/Documents/NexScout/
+
+START HERE:
+===========
+1. Open: CREATE_INTELLIGENT_PROGRESS_TABLES.sql
+2. Copy all contents
+3. Run in Supabase SQL Editor
+4. Then read: PHASE_1_MANUAL_STEPS.md
+

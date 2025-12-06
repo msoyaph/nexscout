@@ -1,0 +1,9 @@
+node_modules
+.next
+dist
+out
+coverage
+supabase
+cache
+logs
+tmp

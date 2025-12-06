@@ -1,4 +1,5 @@
 import { CSVRow } from './csvChunker';
+import { aiOrchestrator } from '../ai/AIOrchestrator';
 
 export interface ExtractedProspect {
   full_name: string;
@@ -8,10 +9,10 @@ export interface ExtractedProspect {
   raw: CSVRow;
 }
 
-const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
-
-export async function extractBatch(batch: CSVRow[]): Promise<ExtractedProspect[]> {
-  if (!OPENAI_API_KEY) {
+export async function extractBatch(batch: CSVRow[], userId?: string): Promise<ExtractedProspect[]> {
+  // If no userId provided, use fallback (no AI extraction)
+  if (!userId) {
+    console.warn('[batchExtractor] No userId provided, using fallback extraction');
     return batch.map(row => ({
       full_name: row.full_name,
       snippet: row.snippet || row.context || '',
@@ -35,35 +36,33 @@ Return format:
   ...
 ]`;
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
+    // Use AIOrchestrator for centralized AI calls
+    const result = await aiOrchestrator.generate({
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a data extraction assistant. Return only valid JSON arrays.',
+        },
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
+      config: {
+        userId: userId,
+        action: 'ai_scan',
         model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a data extraction assistant. Return only valid JSON arrays.',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
         temperature: 0.3,
-        max_tokens: 2000,
-      }),
+        maxTokens: 2000,
+        autoSelectModel: true,
+      }
     });
 
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.statusText}`);
+    if (!result.success || !result.content) {
+      throw new Error(result.error || 'AI extraction failed');
     }
 
-    const data = await response.json();
-    const content = data.choices[0]?.message?.content || '[]';
+    const content = result.content;
     const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const extracted = JSON.parse(cleanContent);
 

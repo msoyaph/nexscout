@@ -46,9 +46,7 @@ export default function SubscriptionCheckoutPage({
   const getIcon = () => {
     switch (tier) {
       case SUBSCRIPTION_TIERS.PRO:
-        return Zap;
-      case SUBSCRIPTION_TIERS.ELITE:
-        return Crown;
+        return Crown; // Pro now gets the crown
       case SUBSCRIPTION_TIERS.TEAM:
         return Users;
       default:
@@ -149,10 +147,8 @@ export default function SubscriptionCheckoutPage({
       <div className="px-6 pt-4 space-y-6">
         {/* Plan Summary */}
         <div className={`rounded-[24px] p-6 text-white shadow-xl ${
-          tier === SUBSCRIPTION_TIERS.ELITE
+          tier === SUBSCRIPTION_TIERS.PRO
             ? 'bg-gradient-to-br from-purple-600 via-pink-600 to-purple-600'
-            : tier === SUBSCRIPTION_TIERS.PRO
-            ? 'bg-gradient-to-br from-blue-600 to-blue-500'
             : tier === SUBSCRIPTION_TIERS.TEAM
             ? 'bg-gradient-to-br from-green-600 to-emerald-600'
             : 'bg-gradient-to-br from-slate-600 to-slate-500'
@@ -162,7 +158,7 @@ export default function SubscriptionCheckoutPage({
               <p className="text-white/80 text-sm mb-1">You're Subscribing to</p>
               <div className="flex items-baseline gap-2 mb-2">
                 <h2 className="text-3xl font-bold">{pricing.displayName}</h2>
-                {tier === SUBSCRIPTION_TIERS.ELITE && <Crown className="size-6" fill="white" />}
+                {tier === SUBSCRIPTION_TIERS.PRO && <Crown className="size-6" fill="white" />}
               </div>
               <p className="text-white/90 text-sm">{billingCycle === 'monthly' ? 'Monthly' : 'Annual'} Billing</p>
             </div>
@@ -175,7 +171,7 @@ export default function SubscriptionCheckoutPage({
             <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2">
               <Sparkles className="size-4 text-yellow-300" />
               <span className="text-sm">
-                Includes <span className="font-bold">{pricing.weeklyCoins}</span> coins per week
+                Includes <span className="font-bold">300</span> Coins per month
               </span>
             </div>
           )}
@@ -294,7 +290,7 @@ export default function SubscriptionCheckoutPage({
               <div className="flex items-start gap-3">
                 <CheckCircle className="size-5 text-green-600 shrink-0 mt-0.5" />
                 <span className="text-sm text-[#6B7280]">
-                  {pricing.weeklyCoins} coins per week automatically added
+                  300 Coins per month automatically added
                 </span>
               </div>
             )}

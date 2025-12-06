@@ -18,44 +18,27 @@ export default function PricingPage({ onNavigateBack, onSelectPlan }: PricingPag
     {
       tier: SUBSCRIPTION_TIERS.PRO,
       name: 'Pro',
-      description: 'Perfect for professionals',
-      icon: Zap,
+      description: 'Full AI power for professionals',
+      icon: Crown,
       features: [
         'Unlimited AI Scans',
         'Unlimited AI Messages',
-        '5 AI Presentations/week',
-        '+150 Weekly Coins',
-        'No Ads',
-        'Partial AI DeepScan',
-        'Extended personality detection',
-        'Full 6-stage pipeline',
-        '2 visible prospect cards',
-        'ALL basic templates',
-        'Priority AI queue'
-      ],
-      highlighted: true,
-      color: 'blue'
-    },
-    {
-      tier: SUBSCRIPTION_TIERS.ELITE,
-      name: 'Elite',
-      description: 'Maximum power & insights',
-      icon: Crown,
-      features: [
-        'Everything in Pro',
-        'Unlimited everything',
+        'Unlimited AI Presentations',
         '+500 Weekly Coins',
-        'AI DeepScan 2.0',
+        'No Ads',
+        'AI DeepScan Analysis',
         'AI Affordability Score',
         'AI Leadership Potential',
         'Multi-Step Sequences (4-7 steps)',
-        'Advanced Elite templates',
+        'Advanced AI templates',
         'ALL cards unlocked',
         'Personalized AI insights',
         'Lead Timeline & Affinity',
+        'Full 8-stage pipeline',
+        'Priority AI queue',
         'Early access features'
       ],
-      highlighted: false,
+      highlighted: true,
       color: 'purple'
     },
     {
@@ -85,9 +68,9 @@ export default function PricingPage({ onNavigateBack, onSelectPlan }: PricingPag
       icon: Sparkles,
       features: [
         '3 AI Prospect Scans/day',
-        '2 AI Messages/day',
+        '3 AI Messages/day',
         '1 AI Presentation/week',
-        '10-15 Daily Coins',
+        '+35 Weekly Coins',
         'Watch ads for bonus coins',
         'Basic 3-stage pipeline',
         '1 visible prospect card'
@@ -104,24 +87,16 @@ export default function PricingPage({ onNavigateBack, onSelectPlan }: PricingPag
       return 'bg-slate-200 text-slate-500 cursor-not-allowed';
     }
 
-    if (tier === SUBSCRIPTION_TIERS.ELITE) {
-      return 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700 shadow-lg hover:shadow-xl';
-    }
-
     if (highlighted) {
-      return 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg hover:shadow-xl';
+      return 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700 shadow-lg hover:shadow-xl';
     }
 
     return 'bg-white border-2 border-blue-600 text-blue-600 hover:bg-blue-50';
   };
 
   const getCardStyle = (tier: string, highlighted: boolean) => {
-    if (tier === SUBSCRIPTION_TIERS.ELITE) {
-      return 'border-2 border-purple-600 shadow-2xl relative overflow-hidden';
-    }
-
     if (highlighted) {
-      return 'border-2 border-blue-600 shadow-xl';
+      return 'border-2 border-purple-600 shadow-2xl relative overflow-hidden';
     }
 
     return 'border border-slate-200';
@@ -180,15 +155,13 @@ export default function PricingPage({ onNavigateBack, onSelectPlan }: PricingPag
                 <div className="flex items-center gap-2 mb-2">
                   <h3 className="font-bold text-base text-[#111827]">Current Plan</h3>
                   <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold text-white ${
-                    currentTier === SUBSCRIPTION_TIERS.ELITE
+                    currentTier === SUBSCRIPTION_TIERS.PRO
                       ? 'bg-gradient-to-r from-purple-600 to-pink-600'
-                      : currentTier === SUBSCRIPTION_TIERS.PRO
-                      ? 'bg-blue-600'
                       : currentTier === SUBSCRIPTION_TIERS.TEAM
                       ? 'bg-green-600'
                       : 'bg-slate-600'
                   }`}>
-                    {currentTier === SUBSCRIPTION_TIERS.ELITE && '👑 '}
+                    {currentTier === SUBSCRIPTION_TIERS.PRO && '👑 '}
                     {TIER_PRICING[currentTier]?.displayName || 'Free'}
                   </span>
                 </div>
@@ -236,7 +209,7 @@ export default function PricingPage({ onNavigateBack, onSelectPlan }: PricingPag
               key={plan.tier}
               className={`bg-white rounded-[30px] shadow-lg overflow-hidden ${getCardStyle(plan.tier, plan.highlighted)}`}
             >
-              {plan.tier === SUBSCRIPTION_TIERS.ELITE && (
+              {plan.highlighted && (
                 <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 animate-pulse" />
               )}
 
@@ -250,19 +223,15 @@ export default function PricingPage({ onNavigateBack, onSelectPlan }: PricingPag
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <div className={`size-12 rounded-[16px] flex items-center justify-center ${
-                      plan.tier === SUBSCRIPTION_TIERS.ELITE
+                      plan.tier === SUBSCRIPTION_TIERS.PRO
                         ? 'bg-gradient-to-br from-purple-100 to-pink-100'
-                        : plan.tier === SUBSCRIPTION_TIERS.PRO
-                        ? 'bg-blue-100'
                         : plan.tier === SUBSCRIPTION_TIERS.TEAM
                         ? 'bg-green-100'
                         : 'bg-slate-100'
                     }`}>
                       <Icon className={`size-6 ${
-                        plan.tier === SUBSCRIPTION_TIERS.ELITE
+                        plan.tier === SUBSCRIPTION_TIERS.PRO
                           ? 'text-purple-600'
-                          : plan.tier === SUBSCRIPTION_TIERS.PRO
-                          ? 'text-blue-600'
                           : plan.tier === SUBSCRIPTION_TIERS.TEAM
                           ? 'text-green-600'
                           : 'text-slate-600'
@@ -314,11 +283,11 @@ export default function PricingPage({ onNavigateBack, onSelectPlan }: PricingPag
                   {plan.features.map((feature, idx) => (
                     <div key={idx} className="flex items-start gap-3">
                       <Check className={`size-5 shrink-0 mt-0.5 ${
-                        plan.tier === SUBSCRIPTION_TIERS.ELITE
+                        plan.tier === SUBSCRIPTION_TIERS.PRO
                           ? 'text-purple-600'
-                          : plan.highlighted
-                          ? 'text-blue-600'
-                          : 'text-green-600'
+                          : plan.tier === SUBSCRIPTION_TIERS.TEAM
+                          ? 'text-green-600'
+                          : 'text-slate-600'
                       }`} />
                       <span className="text-sm text-[#6B7280]">{feature}</span>
                     </div>

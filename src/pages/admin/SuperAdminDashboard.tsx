@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, UsersRound, Building2, CreditCard, Wallet,
   Target, Brain, DollarSign, ShoppingBag, Shield, FileText,
   Webhook, Settings, Activity, UserCog, Menu, X, ChevronRight,
-  TrendingUp, UserPlus, Sparkles, AlertTriangle, Check, BarChart3, Globe, Database
+  TrendingUp, UserPlus, Sparkles, AlertTriangle, Check, BarChart3, Globe, Database, Crown
 } from 'lucide-react';
 import DashboardHome from './DashboardHome';
 import UserManagement from './UserManagement';
@@ -14,6 +14,7 @@ import CoinMissionAnalytics from './CoinMissionAnalytics';
 import SystemHealth from './SystemHealth';
 import AnalyticsIntelligenceDashboard from './AnalyticsIntelligenceDashboard';
 import DataFeederPage from './DataFeederPage';
+import AmbassadorManagement from './AmbassadorManagement';
 
 interface SuperAdminDashboardProps {
   onNavigateBack: () => void;
@@ -30,6 +31,7 @@ export default function SuperAdminDashboard({ onNavigateBack, onNavigate }: Supe
     { id: 'data-feeder', label: 'Data Feeder', icon: Database },
     { id: 'browser-captures', label: 'Browser Captures', icon: Globe },
     { id: 'users', label: 'Users', icon: Users },
+    { id: 'ambassadors', label: 'Ambassador Agents', icon: Crown },
     { id: 'teams', label: 'Teams', icon: UsersRound },
     { id: 'organizations', label: 'Organizations', icon: Building2 },
     { id: 'subscriptions', label: 'Subscriptions', icon: CreditCard },
@@ -55,6 +57,8 @@ export default function SuperAdminDashboard({ onNavigateBack, onNavigate }: Supe
         return <DataFeederPage />;
       case 'users':
         return <UserManagement />;
+      case 'ambassadors':
+        return <AmbassadorManagement />;
       case 'subscriptions':
         return <SubscriptionManagement />;
       case 'financial':

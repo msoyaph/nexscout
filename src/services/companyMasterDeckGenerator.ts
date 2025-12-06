@@ -51,7 +51,7 @@ export class CompanyMasterDeckGenerator {
 
     slides.push(this.generateOfferSlide(companyData));
 
-    if (tier === 'pro' || tier === 'elite') {
+    if (tier === 'pro') {
       slides.push(this.generatePricingSlide(companyData));
       slides.push(this.generateCompetitiveAdvantageSlide(companyData, knowledgeGraph));
       slides.push(this.generateRoadmapSlide(companyData));
@@ -59,7 +59,7 @@ export class CompanyMasterDeckGenerator {
 
     slides.push(this.generateCTASlide(companyData, tone));
 
-    if (tier === 'elite') {
+    if (tier === 'pro') { // Elite removed, Pro gets all features
       slides.push(this.generateTeamSlide(companyData));
       slides.push(this.generateContactSlide(companyData));
       slides.push(this.generateThankYouSlide(companyData));

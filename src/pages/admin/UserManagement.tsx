@@ -53,7 +53,7 @@ export default function UserManagement() {
     const badges = {
       free: { label: 'Free', color: 'bg-gray-100 text-gray-700' },
       pro: { label: 'Pro', color: 'bg-blue-100 text-blue-700' },
-      elite: { label: 'Elite', color: 'bg-purple-100 text-purple-700' },
+      // Elite tier removed
       team: { label: 'Team', color: 'bg-green-100 text-green-700' },
       enterprise: { label: 'Enterprise', color: 'bg-orange-100 text-orange-700' },
     };

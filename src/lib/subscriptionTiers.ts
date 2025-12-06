@@ -32,10 +32,10 @@ export interface TierLimits {
 
 export const TIER_LIMITS: Record<SubscriptionTier, TierLimits> = {
   [SUBSCRIPTION_TIERS.FREE]: {
-    dailyScans: 3,
-    dailyMessages: 3,
-    weeklyPresentations: 1,
-    maxAdsPerDay: 2,
+    dailyScans: 2, // Reduced from 3 - cost control
+    dailyMessages: 2, // Reduced from 3 - cost control
+    weeklyPresentations: 0, // Reduced from 1 - Pro exclusive
+    maxAdsPerDay: 5, // Increased from 2 - more monetization
     coinsPerAd: 2,
     visibleSwipeCards: 1,
     pipelineStages: 3,

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Search, Sparkles, Shield, MessageCircle, Calendar, Lightbulb, RefreshCw, Users as UsersIcon, MessageSquare, Phone, Copy, Check, Home, Users, PlusCircle, TrendingUp, MoreHorizontal, BookOpen, Coins, Save } from 'lucide-react';
+import { ArrowLeft, Search, Sparkles, Shield, MessageCircle, Calendar, Lightbulb, RefreshCw, Users as UsersIcon, MessageSquare, Phone, Copy, Check, Home, Users, PlusCircle, TrendingUp, MoreHorizontal, BookOpen, Coins, Save, Settings, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { messagingEngine } from '../services/ai/messagingEngine';
@@ -59,6 +59,7 @@ export default function MessagingHubPage({
   const [coinBalance, setCoinBalance] = useState(0);
   const [activeTab, setActiveTab] = useState<'generate' | 'library'>('generate');
   const [savedMessage, setSavedMessage] = useState(false);
+  const [showAISettings, setShowAISettings] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -231,10 +232,19 @@ export default function MessagingHubPage({
           </button>
           <h1 className="text-xl font-bold text-gray-900">Messaging Hub</h1>
 
-          {/* Coin Balance */}
-          <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-yellow-50 to-amber-50 rounded-full border border-yellow-200">
-            <Coins className="w-5 h-5 text-yellow-600" />
-            <span className="text-sm font-bold text-yellow-900">{coinBalance.toLocaleString()}</span>
+          {/* Settings & Coin Balance */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowAISettings(true)}
+              className="p-2 hover:bg-purple-50 hover:border-purple-500 border-2 border-gray-200 rounded-lg transition-all"
+              title="AI System Instructions"
+            >
+              <Settings className="w-5 h-5 text-purple-600" />
+            </button>
+            <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-yellow-50 to-amber-50 rounded-full border border-yellow-200">
+              <Coins className="w-5 h-5 text-yellow-600" />
+              <span className="text-sm font-bold text-yellow-900">{coinBalance.toLocaleString()}</span>
+            </div>
           </div>
         </div>
 
@@ -466,7 +476,7 @@ export default function MessagingHubPage({
                 </div>
               )}
 
-              {(result.coachingTip || result.eliteCoachingTip) && tier === 'elite' && (
+              {(result.coachingTip || result.eliteCoachingTip) && tier === 'pro' && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
                   <div className="flex items-start gap-2">
                     <Lightbulb className="w-5 h-5 text-yellow-600 flex-shrink-0" />
@@ -517,6 +527,40 @@ export default function MessagingHubPage({
       </nav>
 
       <SlideInMenu isOpen={menuOpen} onClose={() => setMenuOpen(false)} onNavigate={(page) => { setMenuOpen(false); onNavigate?.(page); }} />
+      
+      {/* AI System Instructions Modal */}
+      {showAISettings && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold">AI Settings</h2>
+              <button
+                onClick={() => setShowAISettings(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-gray-600 mb-6">
+              AI System Instructions feature is being set up. Deploy the database migration first:
+            </p>
+            <div className="bg-gray-900 rounded-lg p-4 mb-4">
+              <code className="text-green-400 text-sm font-mono">
+                supabase db push
+              </code>
+            </div>
+            <p className="text-sm text-gray-500 mb-6">
+              After deploying, this will show the full rich editor with image and file upload capabilities.
+            </p>
+            <button
+              onClick={() => setShowAISettings(false)}
+              className="w-full px-4 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700"
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

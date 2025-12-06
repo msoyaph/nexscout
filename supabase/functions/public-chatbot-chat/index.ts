@@ -639,23 +639,88 @@ async function checkAndCreateProspect(
 
 function extractContactInfo(messages: any[]): any {
   const contactInfo: any = {};
-  const visitorText = messages
-    .filter(m => m.sender === 'visitor')
-    .map(m => m.message)
-    .join(' ');
+  const visitorMessages = messages.filter(m => m.sender === 'visitor');
+  const visitorText = visitorMessages.map(m => m.message).join(' ');
 
+  // Email extraction
   const emailPattern = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
   const emailMatch = visitorText.match(emailPattern);
   if (emailMatch) contactInfo.email = emailMatch[0];
 
+  // Phone extraction
   const phonePattern = /(\+?63|0)?[-.\s]?9\d{2}[-.\s]?\d{3}[-.\s]?\d{4}|\+?\d{10,15}/;
   const phoneMatch = visitorText.match(phonePattern);
   if (phoneMatch) contactInfo.phone = phoneMatch[0].replace(/[-.\s]/g, '');
 
-  const namePattern = /(?:I'm|I am|My name is|This is|Call me)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i;
-  const nameMatch = visitorText.match(namePattern);
-  if (nameMatch) contactInfo.name = nameMatch[1].trim();
+  // Enhanced name extraction - multiple strategies
+  let extractedName = null;
 
+  // Strategy 1: Explicit name introductions (English)
+  const namePattern1 = /(?:I'm|I am|My name is|This is|Call me|I go by)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i;
+  const nameMatch1 = visitorText.match(namePattern1);
+  if (nameMatch1) {
+    extractedName = nameMatch1[1].trim();
+  }
+
+  // Strategy 2: Filipino format with "po" (e.g., "Cliff po", "Juan po")
+  if (!extractedName) {
+    const namePattern2 = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+po\b/i;
+    const nameMatch2 = visitorText.match(namePattern2);
+    if (nameMatch2) {
+      extractedName = nameMatch2[1].trim();
+    }
+  }
+
+  // Strategy 3: Filipino name introduction (Tagalog)
+  if (!extractedName) {
+    const namePattern3 = /(?:Ako si|Ako ay|Pangalan ko ay|Pangalan ko po ay)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i;
+    const nameMatch3 = visitorText.match(namePattern3);
+    if (nameMatch3) {
+      extractedName = nameMatch3[1].trim();
+    }
+  }
+
+  // Strategy 4: Simple capitalized word response (likely a name if short message)
+  if (!extractedName) {
+    // Check each visitor message individually
+    for (const msg of visitorMessages) {
+      const text = msg.message.trim();
+      // If message is short (1-3 words) and starts with capital letter, likely a name
+      const words = text.split(/\s+/);
+      if (words.length >= 1 && words.length <= 3) {
+        // Remove Filipino particles
+        const cleanWords = words.filter(w => !['po', 'lang', 'na'].includes(w.toLowerCase()));
+        if (cleanWords.length > 0) {
+          const possibleName = cleanWords.join(' ');
+          // Check if it looks like a name (starts with capital, no special chars)
+          if (/^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*$/.test(possibleName)) {
+            extractedName = possibleName;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  // Strategy 5: Check AI's response for extracted name (AI often uses the name in reply)
+  if (!extractedName) {
+    const aiMessages = messages.filter(m => m.sender === 'ai');
+    for (const aiMsg of aiMessages) {
+      // Look for patterns like "Nice to meet you, [Name]!" or "Hi [Name]!"
+      const aiNamePattern = /(?:meet you|Hi|Hello|Hey),?\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)[!,]/;
+      const aiNameMatch = aiMsg.message.match(aiNamePattern);
+      if (aiNameMatch) {
+        extractedName = aiNameMatch[1].trim();
+        break;
+      }
+    }
+  }
+
+  if (extractedName) {
+    contactInfo.name = extractedName;
+  }
+
+  // Company extraction
   const companyPattern = /(?:from|work at|company is|represent)\s+([A-Z][A-Za-z0-9\s&,.-]+)/i;
   const companyMatch = visitorText.match(companyPattern);
   if (companyMatch) contactInfo.company = companyMatch[1].trim();

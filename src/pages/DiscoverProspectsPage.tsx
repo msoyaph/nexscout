@@ -269,7 +269,7 @@ export default function DiscoverProspectsPage({
                             </div>
                           </div>
                           <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                            {tier === SUBSCRIPTION_TIERS.FREE ? 'Upgrade to See More' : 'Upgrade to Elite'}
+                            Upgrade to See More
                           </h2>
                           <p className="text-sm text-gray-600 text-center mb-6 max-w-xs">
                             {tier === SUBSCRIPTION_TIERS.FREE
@@ -398,7 +398,7 @@ export default function DiscoverProspectsPage({
           handleNavigate('pricing');
         }}
         feature="Unlimited Prospects"
-        requiredTier={tier === SUBSCRIPTION_TIERS.FREE ? 'pro' : 'elite'}
+        requiredTier="pro"
         currentTier={tier}
       />
     </div>

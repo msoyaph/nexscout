@@ -119,7 +119,7 @@ export default function CompanyWhyUpload({ userTier, onNext, onSkip }: CompanyWh
             </div>
           </div>
 
-          {userTier !== 'elite' && (
+          {userTier !== 'pro' && (
             <div className="bg-gradient-to-r from-amber-50 to-yellow-50 rounded-2xl p-6 border-2 border-amber-200 mb-6">
               <div className="flex items-start gap-4">
                 <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-500 rounded-2xl flex items-center justify-center flex-shrink-0">
@@ -144,7 +144,7 @@ export default function CompanyWhyUpload({ userTier, onNext, onSkip }: CompanyWh
             </div>
           )}
 
-          {userTier === 'elite' && (
+          {userTier === 'pro' && (
             <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl p-6 border-2 border-blue-200 mb-6">
               <div className="flex items-start gap-4">
                 <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center flex-shrink-0">

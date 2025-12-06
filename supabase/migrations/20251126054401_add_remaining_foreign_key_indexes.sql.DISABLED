@@ -1,0 +1,189 @@
+/*
+  # Add Remaining Foreign Key Indexes
+  
+  ## Purpose
+  Add indexes for 110+ remaining foreign key columns that lack covering indexes.
+  These indexes are critical for:
+  - JOIN performance
+  - CASCADE operations
+  - Foreign key constraint checks
+  
+  ## Tables Covered
+  All tables with unindexed foreign keys including:
+  - AI and prospect-related tables
+  - Analytics and tracking tables
+  - User activity and session tables
+  - Message and sequence tables
+  
+  ## Safety
+  Only creates indexes on tables that exist.
+  Safe to run on any database state.
+*/
+
+-- Helper function to safely create index only if table exists
+CREATE OR REPLACE FUNCTION create_index_if_table_exists(
+  p_index_name TEXT,
+  p_table_name TEXT,
+  p_column_name TEXT
+) RETURNS VOID AS $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables 
+    WHERE table_schema = 'public' 
+    AND table_name = p_table_name
+  ) THEN
+    EXECUTE format(
+      'CREATE INDEX IF NOT EXISTS %I ON public.%I(%I)',
+      p_index_name,
+      p_table_name,
+      p_column_name
+    );
+  END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- AI and prospect-related indexes
+SELECT create_index_if_table_exists('idx_agent_skill_gaps_user_id', 'agent_skill_gaps', 'user_id');
+SELECT create_index_if_table_exists('idx_ai_alerts_prospect_id', 'ai_alerts', 'prospect_id');
+SELECT create_index_if_table_exists('idx_ai_closer_sessions_user_id', 'ai_closer_sessions', 'user_id');
+SELECT create_index_if_table_exists('idx_ai_generated_messages_prospect_id', 'ai_generated_messages', 'prospect_id');
+SELECT create_index_if_table_exists('idx_ai_generated_messages_user_id', 'ai_generated_messages', 'user_id');
+SELECT create_index_if_table_exists('idx_ai_generations_prospect_id', 'ai_generations', 'prospect_id');
+SELECT create_index_if_table_exists('idx_ai_generations_user_id', 'ai_generations', 'user_id');
+SELECT create_index_if_table_exists('idx_ai_mentor_sessions_prospect_id', 'ai_mentor_sessions', 'prospect_id');
+SELECT create_index_if_table_exists('idx_ai_mentor_sessions_user_id', 'ai_mentor_sessions', 'user_id');
+SELECT create_index_if_table_exists('idx_ai_message_sequences_prospect_id', 'ai_message_sequences', 'prospect_id');
+SELECT create_index_if_table_exists('idx_ai_tasks_prospect_id', 'ai_tasks', 'prospect_id');
+SELECT create_index_if_table_exists('idx_ai_tasks_user_id', 'ai_tasks', 'user_id');
+SELECT create_index_if_table_exists('idx_ai_usage_logs_user_id', 'ai_usage_logs', 'user_id');
+
+-- Analytics indexes
+CREATE INDEX IF NOT EXISTS idx_analytics_cohort_membership_cohort_id ON public.analytics_cohort_membership(cohort_id);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_user_id ON public.analytics_events(user_id);
+CREATE INDEX IF NOT EXISTS idx_analytics_funnel_steps_funnel_id ON public.analytics_funnel_steps(funnel_id);
+CREATE INDEX IF NOT EXISTS idx_analytics_funnel_steps_user_id ON public.analytics_funnel_steps(user_id);
+CREATE INDEX IF NOT EXISTS idx_analytics_sessions_user_id ON public.analytics_sessions(user_id);
+
+-- User and prospect relationship indexes
+CREATE INDEX IF NOT EXISTS idx_call_scripts_user_id ON public.call_scripts(user_id);
+CREATE INDEX IF NOT EXISTS idx_closing_scripts_user_id ON public.closing_scripts(user_id);
+CREATE INDEX IF NOT EXISTS idx_coaching_sessions_leader_user_id ON public.coaching_sessions(leader_user_id);
+CREATE INDEX IF NOT EXISTS idx_coin_transactions_user_id ON public.coin_transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_conversation_analyses_prospect_id ON public.conversation_analyses(prospect_id);
+CREATE INDEX IF NOT EXISTS idx_conversation_analyses_user_id ON public.conversation_analyses(user_id);
+CREATE INDEX IF NOT EXISTS idx_deal_timeline_forecasts_user_id ON public.deal_timeline_forecasts(user_id);
+CREATE INDEX IF NOT EXISTS idx_downline_members_leader_user_id ON public.downline_members(leader_user_id);
+CREATE INDEX IF NOT EXISTS idx_elite_coaching_sessions_user_id ON public.elite_coaching_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_emotional_state_analyses_user_id ON public.emotional_state_analyses(user_id);
+
+-- Experiment indexes
+CREATE INDEX IF NOT EXISTS idx_experiment_assignments_variant_id ON public.experiment_assignments(variant_id);
+CREATE INDEX IF NOT EXISTS idx_experiment_variants_experiment_id ON public.experiment_variants(experiment_id);
+
+-- Financial and profile indexes
+CREATE INDEX IF NOT EXISTS idx_financial_profiles_user_id ON public.financial_profiles(user_id);
+CREATE INDEX IF NOT EXISTS idx_follow_up_reminders_user_id ON public.follow_up_reminders(user_id);
+CREATE INDEX IF NOT EXISTS idx_follow_up_sequences_prospect_id ON public.follow_up_sequences(prospect_id);
+CREATE INDEX IF NOT EXISTS idx_follow_up_sequences_user_id ON public.follow_up_sequences(user_id);
+
+-- Generated content indexes
+CREATE INDEX IF NOT EXISTS idx_generated_messages_prospect_id ON public.generated_messages(prospect_id);
+CREATE INDEX IF NOT EXISTS idx_generated_messages_user_id ON public.generated_messages(user_id);
+CREATE INDEX IF NOT EXISTS idx_generated_scripts_prospect_id ON public.generated_scripts(prospect_id);
+CREATE INDEX IF NOT EXISTS idx_generated_scripts_user_id ON public.generated_scripts(user_id);
+
+-- Hot leads and insights
+CREATE INDEX IF NOT EXISTS idx_hot_lead_accelerations_prospect_id ON public.hot_lead_accelerations(prospect_id);
+CREATE INDEX IF NOT EXISTS idx_hot_lead_accelerations_user_id ON public.hot_lead_accelerations(user_id);
+CREATE INDEX IF NOT EXISTS idx_insight_assistant_history_admin_user_id ON public.insight_assistant_history(admin_user_id);
+
+-- Lead nurture and revival
+CREATE INDEX IF NOT EXISTS idx_lead_nurture_pathways_prospect_id ON public.lead_nurture_pathways(prospect_id);
+CREATE INDEX IF NOT EXISTS idx_lead_nurture_pathways_user_id ON public.lead_nurture_pathways(user_id);
+CREATE INDEX IF NOT EXISTS idx_lead_revival_messages_prospect_id ON public.lead_revival_messages(prospect_id);
+CREATE INDEX IF NOT EXISTS idx_lead_revival_messages_user_id ON public.lead_revival_messages(user_id);
+CREATE INDEX IF NOT EXISTS idx_leadership_playbooks_user_id ON public.leadership_playbooks(user_id);
+
+-- Meeting and member indexes
+CREATE INDEX IF NOT EXISTS idx_meeting_booking_scripts_user_id ON public.meeting_booking_scripts(user_id);
+CREATE INDEX IF NOT EXISTS idx_meeting_predictions_user_id ON public.meeting_predictions(user_id);
+CREATE INDEX IF NOT EXISTS idx_member_performance_logs_downline_member_id ON public.member_performance_logs(downline_member_id);
+
+-- Message sequences
+CREATE INDEX IF NOT EXISTS idx_message_sequences_prospect_id ON public.message_sequences(prospect_id);
+CREATE INDEX IF NOT EXISTS idx_message_sequences_user_id ON public.message_sequences(user_id);
+CREATE INDEX IF NOT EXISTS idx_mission_completions_user_id ON public.mission_completions(user_id);
+
+-- Neural and notification indexes
+CREATE INDEX IF NOT EXISTS idx_neural_behavior_scores_user_id ON public.neural_behavior_scores(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_related_prospect_id ON public.notifications(related_prospect_id);
+
+-- Objection and pain point indexes
+CREATE INDEX IF NOT EXISTS idx_objection_responses_prospect_id ON public.objection_responses(prospect_id);
+CREATE INDEX IF NOT EXISTS idx_objection_responses_user_id ON public.objection_responses(user_id);
+CREATE INDEX IF NOT EXISTS idx_pain_point_analyses_user_id ON public.pain_point_analyses(user_id);
+
+-- Persona and personality indexes
+CREATE INDEX IF NOT EXISTS idx_persona_learning_logs_user_id ON public.persona_learning_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_personality_profiles_user_id ON public.personality_profiles(user_id);
+CREATE INDEX IF NOT EXISTS idx_pipeline_stage_changes_user_id ON public.pipeline_stage_changes(user_id);
+CREATE INDEX IF NOT EXISTS idx_pitch_angle_recommendations_user_id ON public.pitch_angle_recommendations(user_id);
+CREATE INDEX IF NOT EXISTS idx_pitch_decks_prospect_id ON public.pitch_decks(prospect_id);
+
+-- Platform and processing indexes
+CREATE INDEX IF NOT EXISTS idx_platform_sync_logs_user_id ON public.platform_sync_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_processing_queue_session_id ON public.processing_queue(session_id);
+
+-- Prospect-related indexes
+CREATE INDEX IF NOT EXISTS idx_prospect_events_prospect_id ON public.prospect_events(prospect_id);
+CREATE INDEX IF NOT EXISTS idx_prospect_events_user_id ON public.prospect_events(user_id);
+CREATE INDEX IF NOT EXISTS idx_prospect_feature_vectors_user_id ON public.prospect_feature_vectors(user_id);
+CREATE INDEX IF NOT EXISTS idx_prospect_platform_sources_user_id ON public.prospect_platform_sources(user_id);
+CREATE INDEX IF NOT EXISTS idx_prospect_profiles_user_id ON public.prospect_profiles(user_id);
+CREATE INDEX IF NOT EXISTS idx_prospect_qualifications_user_id ON public.prospect_qualifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_prospect_scores_prospect_id ON public.prospect_scores(prospect_id);
+CREATE INDEX IF NOT EXISTS idx_prospect_scores_user_id ON public.prospect_scores(user_id);
+
+-- Raw candidates and referrals
+CREATE INDEX IF NOT EXISTS idx_raw_prospect_candidates_user_id ON public.raw_prospect_candidates(user_id);
+CREATE INDEX IF NOT EXISTS idx_referral_messages_user_id ON public.referral_messages(user_id);
+
+-- Retention indexes
+CREATE INDEX IF NOT EXISTS idx_retention_campaign_logs_playbook_id ON public.retention_campaign_logs(playbook_id);
+CREATE INDEX IF NOT EXISTS idx_retention_results_playbook_id ON public.retention_results(playbook_id);
+
+-- Sales and scanning indexes
+CREATE INDEX IF NOT EXISTS idx_sales_call_simulations_user_id ON public.sales_call_simulations(user_id);
+CREATE INDEX IF NOT EXISTS idx_scanning_sessions_user_id ON public.scanning_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_schedule_events_prospect_id ON public.schedule_events(prospect_id);
+
+-- Scoring indexes
+CREATE INDEX IF NOT EXISTS idx_scoring_history_prospect_id ON public.scoring_history(prospect_id);
+CREATE INDEX IF NOT EXISTS idx_scoring_history_user_id ON public.scoring_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_scoutscore_calculations_prospect_id ON public.scoutscore_calculations(prospect_id);
+CREATE INDEX IF NOT EXISTS idx_scoutscore_calculations_user_id ON public.scoutscore_calculations(user_id);
+CREATE INDEX IF NOT EXISTS idx_sequence_step_logs_sequence_id ON public.sequence_step_logs(sequence_id);
+
+-- Social and story indexes
+CREATE INDEX IF NOT EXISTS idx_social_intent_predictions_user_id ON public.social_intent_predictions(user_id);
+CREATE INDEX IF NOT EXISTS idx_social_media_replies_user_id ON public.social_media_replies(user_id);
+CREATE INDEX IF NOT EXISTS idx_story_messages_prospect_id ON public.story_messages(prospect_id);
+CREATE INDEX IF NOT EXISTS idx_story_messages_user_id ON public.story_messages(user_id);
+
+-- Subscription and system indexes
+CREATE INDEX IF NOT EXISTS idx_subscription_events_user_id ON public.subscription_events(user_id);
+CREATE INDEX IF NOT EXISTS idx_system_logs_user_id ON public.system_logs(user_id);
+
+-- Team and training indexes
+CREATE INDEX IF NOT EXISTS idx_team_training_programs_leader_id ON public.team_training_programs(leader_id);
+CREATE INDEX IF NOT EXISTS idx_training_video_modules_user_id ON public.training_video_modules(user_id);
+
+-- User activity and library indexes
+CREATE INDEX IF NOT EXISTS idx_user_activity_logs_user_id ON public.user_activity_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_library_user_id ON public.user_library(user_id);
+
+-- Video and viral indexes
+CREATE INDEX IF NOT EXISTS idx_video_pitch_scripts_user_id ON public.video_pitch_scripts(user_id);
+CREATE INDEX IF NOT EXISTS idx_viral_referral_conversions_share_event_id ON public.viral_referral_conversions(share_event_id);
+CREATE INDEX IF NOT EXISTS idx_viral_share_messages_user_id ON public.viral_share_messages(user_id);
+CREATE INDEX IF NOT EXISTS idx_voice_note_analyses_user_id ON public.voice_note_analyses(user_id);

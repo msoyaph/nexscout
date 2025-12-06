@@ -89,8 +89,8 @@ class FollowUpSequencerService {
     const prospectContext = await this.getProspectContext(input.prospectId, input.userId);
 
     const maxSteps = this.MAX_STEPS[tier as keyof typeof this.MAX_STEPS];
-    const includeCoaching = tier === 'elite';
-    const includeScheduling = tier === 'elite';
+    const includeCoaching = tier === 'pro';
+    const includeScheduling = tier === 'pro';
 
     const sequence = this.buildSequence(
       prospectContext,
@@ -1164,7 +1164,7 @@ If interested, let me know. If not, no worries at all!`;
       .eq('id', sequenceId)
       .eq('user_id', userId);
 
-    if (tier === 'elite') {
+    if (tier === 'pro') {
       await supabase.rpc('create_sequence_reminders', {
         p_sequence_id: sequenceId,
         p_user_id: userId,

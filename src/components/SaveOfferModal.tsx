@@ -141,7 +141,7 @@ export default function SaveOfferModal({
                 <div>
                   <div className="font-bold text-gray-900 mb-1">Switch to Cheaper Plan</div>
                   <div className="text-sm text-gray-600">
-                    {currentTier === 'elite' ? 'Downgrade to Pro' : 'Downgrade to Starter'}
+                    Downgrade to Starter
                   </div>
                 </div>
                 <TrendingDown className="w-5 h-5 text-purple-600" />

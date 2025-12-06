@@ -75,7 +75,7 @@ class PitchDeckGeneratorService {
 
     await this.checkUsageLimits(input.userId, tier, input.deckType, profile.weekly_presentations_used || 0);
 
-    if (input.deckType === 'elite' && tier !== 'elite') {
+    if (input.deckType === 'elite' && tier !== 'pro') {
       return {
         deckId: '',
         deck: {

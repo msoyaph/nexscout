@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { ArrowLeft, Lock, Eye, EyeOff, Loader, CheckCircle, AlertCircle, Shield } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ChangePasswordPageProps {
   onNavigateBack: () => void;
 }
 
 export default function ChangePasswordPage({ onNavigateBack }: ChangePasswordPageProps) {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
@@ -67,6 +69,7 @@ export default function ChangePasswordPage({ onNavigateBack }: ChangePasswordPag
     setError('');
     setSuccess(false);
 
+    // Validation
     if (formData.newPassword !== formData.confirmPassword) {
       setError('New passwords do not match');
       return;
@@ -85,11 +88,52 @@ export default function ChangePasswordPage({ onNavigateBack }: ChangePasswordPag
     setLoading(true);
 
     try {
+      // Verify current password by attempting to sign in
+      if (user?.email && formData.currentPassword) {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: user.email,
+          password: formData.currentPassword
+        });
+
+        if (signInError) {
+          throw new Error('Current password is incorrect');
+        }
+      }
+
+      // Update password
       const { error: updateError } = await supabase.auth.updateUser({
         password: formData.newPassword
       });
 
       if (updateError) throw updateError;
+
+      // Send email notification
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-password-change-email`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            },
+            body: JSON.stringify({
+              userEmail: user?.email,
+              userName: user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User',
+              changedAt: new Date().toISOString(),
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          // Email sending failed, but password change succeeded - log warning
+          console.warn('Password changed but email notification failed');
+        }
+      } catch (emailError) {
+        // Email sending failed, but password change succeeded - log warning
+        console.warn('Password changed but email notification failed:', emailError);
+      }
 
       setSuccess(true);
       setFormData({
@@ -140,6 +184,30 @@ export default function ChangePasswordPage({ onNavigateBack }: ChangePasswordPag
 
         <div className="bg-white rounded-[24px] p-6 border border-[#E5E7EB] shadow-sm">
           <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label className="flex items-center gap-2 text-sm font-semibold text-[#111827] mb-2">
+                <Lock className="size-4" />
+                Current Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showCurrentPassword ? 'text' : 'password'}
+                  value={formData.currentPassword}
+                  onChange={(e) => setFormData({ ...formData, currentPassword: e.target.value })}
+                  placeholder="Enter your current password"
+                  className="w-full px-4 py-3 pr-12 bg-slate-50 rounded-[16px] border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  {showCurrentPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
+                </button>
+              </div>
+            </div>
+
             <div>
               <label className="flex items-center gap-2 text-sm font-semibold text-[#111827] mb-2">
                 <Lock className="size-4" />

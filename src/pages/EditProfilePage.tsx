@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, User, Mail, Briefcase, Phone, MapPin, Loader, CheckCircle, AlertCircle, Camera } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import { generateDicebearUrl } from '../services/avatarService';
 
 interface EditProfilePageProps {
   onNavigateBack: () => void;
@@ -12,6 +13,9 @@ export default function EditProfilePage({ onNavigateBack }: EditProfilePageProps
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
     full_name: '',
@@ -30,8 +34,80 @@ export default function EditProfilePage({ onNavigateBack }: EditProfilePageProps
         location: profile.location || '',
         bio: profile.bio || ''
       });
+      // Load avatar URL
+      if (profile.uploaded_image_url) {
+        setAvatarUrl(profile.uploaded_image_url);
+      }
     }
   }, [profile]);
+
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setError('Please select an image file (PNG, JPG, or WebP)');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Image size must be less than 5MB');
+      return;
+    }
+
+    setUploadingAvatar(true);
+    setError('');
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+      const filePath = `user-avatars/${fileName}`;
+
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('prospect-images')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('prospect-images')
+        .getPublicUrl(filePath);
+
+      // Update profile with new avatar URL
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ uploaded_image_url: publicUrl })
+        .eq('id', user.id);
+
+      if (updateError) throw updateError;
+
+      setAvatarUrl(publicUrl);
+      await refreshProfile();
+    } catch (err: any) {
+      console.error('Error uploading avatar:', err);
+      setError(err.message || 'Failed to upload avatar. Please try again.');
+    } finally {
+      setUploadingAvatar(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const getAvatarSrc = () => {
+    if (avatarUrl) return avatarUrl;
+    if (profile?.uploaded_image_url) return profile.uploaded_image_url;
+    if (user?.email) return generateDicebearUrl(user.email);
+    return generateDicebearUrl('default');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,16 +116,23 @@ export default function EditProfilePage({ onNavigateBack }: EditProfilePageProps
     setSuccess(false);
 
     try {
+      const updateData: any = {
+        full_name: formData.full_name,
+        profession: formData.profession,
+        phone: formData.phone,
+        location: formData.location,
+        bio: formData.bio,
+        updated_at: new Date().toISOString()
+      };
+
+      // Include avatar URL if it was updated
+      if (avatarUrl) {
+        updateData.uploaded_image_url = avatarUrl;
+      }
+
       const { error: updateError } = await supabase
         .from('profiles')
-        .update({
-          full_name: formData.full_name,
-          profession: formData.profession,
-          phone: formData.phone,
-          location: formData.location,
-          bio: formData.bio,
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', user?.id);
 
       if (updateError) throw updateError;
@@ -100,15 +183,33 @@ export default function EditProfilePage({ onNavigateBack }: EditProfilePageProps
           <div className="flex flex-col items-center mb-6">
             <div className="relative">
               <img
-                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.email}`}
+                src={getAvatarSrc()}
                 alt="Profile"
-                className="size-24 rounded-full border-4 border-slate-200"
+                className="size-24 rounded-full border-4 border-slate-200 object-cover"
               />
-              <button className="absolute bottom-0 right-0 size-8 rounded-full bg-blue-600 flex items-center justify-center shadow-lg border-2 border-white">
-                <Camera className="size-4 text-white" />
+              <button
+                type="button"
+                onClick={handleAvatarClick}
+                disabled={uploadingAvatar}
+                className="absolute bottom-0 right-0 size-8 rounded-full bg-blue-600 flex items-center justify-center shadow-lg border-2 border-white hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {uploadingAvatar ? (
+                  <Loader className="size-4 text-white animate-spin" />
+                ) : (
+                  <Camera className="size-4 text-white" />
+                )}
               </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/webp"
+                onChange={handleAvatarUpload}
+                className="hidden"
+              />
             </div>
-            <p className="text-xs text-[#6B7280] mt-3">Click to change avatar</p>
+            <p className="text-xs text-[#6B7280] mt-3">
+              {uploadingAvatar ? 'Uploading...' : 'Click to change avatar'}
+            </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">

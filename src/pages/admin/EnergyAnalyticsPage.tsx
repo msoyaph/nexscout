@@ -245,13 +245,13 @@ export default function EnergyAnalyticsPage({ onBack }: EnergyAnalyticsPageProps
                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
                     item.tier === 'free' ? 'bg-gray-200' :
                     item.tier === 'pro' ? 'bg-blue-200' :
-                    item.tier === 'elite' ? 'bg-purple-200' :
+                    item.tier === 'pro' ? 'bg-purple-200' :
                     'bg-green-200'
                   }`}>
                     <Battery className={`w-5 h-5 ${
                       item.tier === 'free' ? 'text-gray-600' :
                       item.tier === 'pro' ? 'text-blue-600' :
-                      item.tier === 'elite' ? 'text-purple-600' :
+                      item.tier === 'pro' ? 'text-purple-600' :
                       'text-green-600'
                     }`} />
                   </div>

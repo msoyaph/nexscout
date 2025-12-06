@@ -1,13 +1,18 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { EnergyProvider } from './contexts/EnergyContext';
 import { NudgeProvider } from './contexts/NudgeContext';
 import { NudgeRenderer } from './components/upgrade';
+import { FloatingNudgeBubble, NudgeToast } from './components/onboarding/OnboardingNudges';
+import PersistentChecklistWidget from './components/onboarding/PersistentChecklistWidget';
 import SplashScreen from './components/SplashScreen';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
+import NewLoginPage from './pages/NewLoginPage';
+import NewSignupPage from './pages/NewSignupPage';
 import HomePage from './pages/HomePage';
 import OnboardingFlow from './pages/onboarding/OnboardingFlow';
+import QuickOnboardingFlow from './pages/onboarding/QuickOnboardingFlow';
 import MentorChatPage from './pages/onboarding/MentorChatPage';
 import DiscoverProspectsPage from './pages/DiscoverProspectsPage';
 import AIPitchDeckPage from './pages/AIPitchDeckPage';
@@ -32,6 +37,7 @@ import ScanLibraryPage from './pages/ScanLibraryPage';
 import ScanResultsViewerPage from './pages/ScanResultsViewerPage';
 import ExtensionSetupGuidePage from './pages/setup/ExtensionSetupGuidePage';
 import ScanDiagnosticsPage from './pages/admin/ScanDiagnosticsPage';
+import OnboardingAnalyticsDashboard from './pages/admin/OnboardingAnalyticsDashboard';
 import CsvCheckPage from './pages/CsvCheckPage';
 import CompanyOverviewPage from './pages/company/CompanyOverviewPage';
 import CompanyPerformancePage from './pages/company/CompanyPerformancePage';
@@ -39,6 +45,7 @@ import EnergyRefillPage from './pages/EnergyRefillPage';
 import AIChatbotPage from './pages/AIChatbotPage';
 import AIChatbotControlPanel from './pages/AIChatbotControlPanel';
 import PublicChatPage from './pages/PublicChatPage';
+import PublicBookingPage from './pages/PublicBookingPage';
 import ChatbotSettingsPage from './pages/ChatbotSettingsPage';
 import ChatbotSessionsPage from './pages/ChatbotSessionsPage';
 import ChatbotSessionViewerPage from './pages/ChatbotSessionViewerPage';
@@ -64,6 +71,7 @@ import MessagingHubPage from './pages/MessagingHubPage';
 import AdminControlPanel from './pages/admin/AdminControlPanel';
 import AiAdminEditor from './pages/admin/AiAdminEditor';
 import LeadsDashboardPage from './pages/LeadsDashboardPage';
+import AutomationToastContainer from './components/automation/AutomationToastContainer';
 
 type AuthView = 'login' | 'onboarding' | 'signup';
 type Page = 'home' | 'discover' | 'pitchdeck' | 'messagesequencer' | 'realtimescan' | 'deepscan' | 'support' | 'scan-entry' | 'scan-upload' | 'scan-processing' | 'scan-results' | 'prospect-detail' | 'deep-scan' | 'deep-scan-v3' | 'pricing' | 'library' | 'notifications' | 'notification-settings' | 'personal-about' | 'about-my-company' | 'scan-prospects-v25' | 'scan-library' | 'scan-results-viewer' | 'extension-setup' | 'admin-scan-diagnostics' | 'csv-check' | 'company-overview' | 'company-performance' | 'energy-refill' | 'ai-chatbot' | 'ai-chatbot-settings' | 'chatbot-settings' | 'chatbot-sessions' | 'chatbot-session-viewer' | 'leads-dashboard' | 'public-chat' | 'calendar' | 'todos' | 'reminders' | 'notification-preferences' | 'team-billing' | 'team-seats' | 'nudge-demo' | 'gov-overview' | 'gov-org-chart' | 'gov-engines' | 'gov-health' | 'gov-audit' | 'gov-departments' | 'gov-economy' | 'add-product' | 'products-list' | 'product-detail' | 'product-analytics' | 'mentor-chat' | 'ai-messages' | 'messaging-hub' | 'admin-control-panel' | 'ai-admin-editor';
@@ -92,6 +100,13 @@ function App() {
         }}
       />
     );
+  }
+
+  // Public Booking Route: /book/[unique_id]
+  if (path.startsWith('/book/')) {
+    const slug = path.split('/book/')[1];
+    console.log('[App] Public booking route detected! Slug:', slug);
+    return <PublicBookingPage slug={slug} />;
   }
 
   // About Me Route: /me/[unique_id]
@@ -144,6 +159,22 @@ function AppContent() {
     setPageOptions(options || null);
   };
 
+  // Listen for navigation events from nudge system
+  useEffect(() => {
+    const handleNavigateEvent = (e: CustomEvent) => {
+      const page = e.detail?.page || 'pricing';
+      handleNavigate(page);
+    };
+
+    window.addEventListener('navigate', handleNavigateEvent as EventListener);
+    window.addEventListener('navigate-to-upgrade', handleNavigateEvent as EventListener);
+
+    return () => {
+      window.removeEventListener('navigate', handleNavigateEvent as EventListener);
+      window.removeEventListener('navigate-to-upgrade', handleNavigateEvent as EventListener);
+    };
+  }, []);
+
   if (showSplash) {
     return <SplashScreen onComplete={() => setShowSplash(false)} />;
   }
@@ -159,14 +190,20 @@ function AppContent() {
   if (!user) {
     if (authView === 'signup') {
       return (
-        <SignupPage
+        <NewSignupPage
           onNavigateToLogin={() => setAuthView('login')}
-          onSignupSuccess={() => setAuthView('login')}
+          onSignupSuccess={async () => {
+            // After successful signup, refresh profile to trigger onboarding check
+            console.log('[App] Signup successful, refreshing profile...');
+            await refreshProfile();
+            console.log('[App] Profile refreshed, onboarding_completed:', profile?.onboarding_completed);
+            // Don't reload - let React handle the state change
+          }}
         />
       );
     }
     return (
-      <LoginPage
+      <NewLoginPage
         onNavigateToSignup={() => setAuthView('signup')}
         onLoginSuccess={() => {
           setAuthView('login');
@@ -175,20 +212,40 @@ function AppContent() {
     );
   }
 
-  if (profile && !profile.onboarding_completed && authView !== 'onboarding') {
-    setAuthView('onboarding');
-  }
+  // DEBUG: Check onboarding status
+  console.log('[App] Profile loaded:', {
+    email: profile?.email,
+    onboarding_completed: profile?.onboarding_completed,
+    authView: authView
+  });
 
-  if (authView === 'onboarding' || (profile && !profile.onboarding_completed)) {
+  // CRITICAL FIX: Only show onboarding if ACTUALLY not completed
+  if (profile && !profile.onboarding_completed) {
+    if (authView !== 'onboarding') {
+      console.log('[App] Setting authView to onboarding');
+      setAuthView('onboarding');
+    }
+    
+    console.log('[App] Showing QuickOnboardingFlow!');
     return (
-      <OnboardingFlow
-        onComplete={async (data: OnboardingData) => {
-          setOnboardingData(data);
+      <QuickOnboardingFlow
+        onComplete={async () => {
+          console.log('[App] Onboarding completed! Refreshing profile...');
           await refreshProfile();
-          setAuthView('login');
+          setAuthView('login'); // Clear onboarding view
+          setCurrentPage('home');
+        }}
+        onNavigate={(page: string) => {
+          setCurrentPage(page as Page);
         }}
       />
     );
+  }
+
+  // If onboarding is complete but authView is still 'onboarding', fix it
+  if (profile && profile.onboarding_completed && authView === 'onboarding') {
+    console.log('[App] Onboarding already complete, clearing authView');
+    setAuthView('login');
   }
 
   // Render the appropriate page
@@ -242,6 +299,8 @@ function AppContent() {
         return <ExtensionSetupGuidePage onNavigate={handleNavigate} />;
       case 'admin-scan-diagnostics':
         return <ScanDiagnosticsPage onNavigate={handleNavigate} />;
+      case 'admin-onboarding-analytics':
+        return <OnboardingAnalyticsDashboard onBack={() => handleNavigate('home')} />;
       case 'csv-check':
         return <CsvCheckPage onNavigate={handleNavigate} />;
       case 'company-overview':
@@ -314,6 +373,16 @@ function AppContent() {
     <>
       {renderPage()}
       <NudgeRenderer />
+      <AutomationToastContainer />
+      
+      {/* Onboarding Nudges & Checklist (only show if logged in and not on onboarding pages) */}
+      {user && profile && (
+        <>
+          <FloatingNudgeBubble />
+          <NudgeToast />
+          <PersistentChecklistWidget />
+        </>
+      )}
     </>
   );
 }

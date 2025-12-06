@@ -90,13 +90,13 @@ export async function getCompanyOnboardingMissions(userId: string): Promise<Tier
 
 export function getCurrentReward(mission: TieredMission): number {
   const tier = mission.userTier.toLowerCase();
-  if (tier === 'elite') return mission.rewardElite;
+  if (tier === 'pro') return mission.rewardPro || mission.rewardElite; // Elite removed, use Pro rewards
   if (tier === 'pro') return mission.rewardPro;
   return mission.rewardFree;
 }
 
 export function getUpgradeReward(mission: TieredMission, targetTier: 'pro' | 'elite'): number {
-  if (targetTier === 'elite') return mission.rewardElite;
+  if (targetTier === 'pro') return mission.rewardPro || mission.rewardElite; // Elite removed, use Pro rewards
   if (targetTier === 'pro') return mission.rewardPro;
   return mission.rewardFree;
 }
@@ -120,7 +120,7 @@ export async function completeTieredMission(
 
     let coinsAwarded = missionDef.reward_free;
     if (tier === 'pro') coinsAwarded = missionDef.reward_pro;
-    if (tier === 'elite') coinsAwarded = missionDef.reward_elite;
+    if (tier === 'pro') coinsAwarded = missionDef.reward_pro || missionDef.reward_elite; // Elite removed
 
     const { error: progressError } = await supabase.from('user_mission_progress').upsert(
       {

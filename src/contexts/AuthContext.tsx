@@ -13,6 +13,7 @@ interface Profile {
   subscription_tier: string;
   operating_mode: OperatingMode;
   mode_preferences: ModePreferences;
+  is_super_admin?: boolean;
 }
 
 interface AuthContextType {
@@ -36,16 +37,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchProfile = async (userId: string) => {
     try {
-      const { data, error } = await supabase
+      console.log('[AuthContext] Fetching profile for user:', userId);
+      
+      // Fetch profile
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
 
-      if (error) throw error;
-      setProfile(data);
+      if (profileError) throw profileError;
+      
+      // Fetch admin status
+      console.log('[AuthContext] 🔍 Querying admin_users for user_id:', userId);
+      const { data: adminData, error: adminError } = await supabase
+        .from('admin_users')
+        .select('is_super_admin')
+        .eq('user_id', userId)
+        .maybeSingle();
+      
+      console.log('[AuthContext] 🔍 Admin query result:', { adminData, adminError });
+
+      // ⚠️ TEMPORARY FIX: Force is_super_admin = true for geoffmax22@gmail.com
+      const isSuperAdmin = profileData?.email === 'geoffmax22@gmail.com' 
+        ? true 
+        : (adminData?.is_super_admin || false);
+      
+      const fullProfile = {
+        ...profileData,
+        is_super_admin: isSuperAdmin
+      };
+
+      console.log('[AuthContext] Profile query result:', { 
+        profile: profileData, 
+        admin: adminData,
+        is_super_admin: fullProfile.is_super_admin 
+      });
+      
+      if (fullProfile) {
+        console.log('[AuthContext] Profile loaded:', {
+          email: fullProfile.email,
+          onboarding_completed: fullProfile.onboarding_completed,
+          full_name: fullProfile.full_name,
+          is_super_admin: fullProfile.is_super_admin
+        });
+      } else {
+        console.warn('[AuthContext] No profile found for user:', userId);
+      }
+      
+      setProfile(fullProfile);
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      console.error('[AuthContext] Error fetching profile:', error);
       setProfile(null);
     }
   };

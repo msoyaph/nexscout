@@ -61,7 +61,7 @@ class MessagingEngineV2Service {
     const context = await this.getProspectContext(prospectId, userId);
     const tier = await this.getUserTier(userId);
 
-    const response = this.buildObjectionResponse(objectionType, context, industry, tone, tier === 'elite');
+    const response = this.buildObjectionResponse(objectionType, context, industry, tone, tier === 'pro');
 
     await supabase.from('objection_responses').insert({
       user_id: userId,
@@ -351,7 +351,7 @@ The door is always open kung magbago isip mo or if I can help in any other way. 
     const context = await this.getProspectContext(prospectId, userId);
     const tier = await this.getUserTier(userId);
 
-    const script = this.buildBookingScript(context, industry, tone, tier === 'elite');
+    const script = this.buildBookingScript(context, industry, tone, tier === 'pro');
 
     await supabase.from('meeting_booking_scripts').insert({
       user_id: userId,
@@ -425,8 +425,8 @@ If you are curious, let me know when works. If not, no worries at all.`;
     userGoal: 'recruit' | 'sell' | 'follow_up' | 'close_call'
   ): Promise<CoachingSession> {
     const tier = await this.getUserTier(userId);
-    if (tier !== 'elite') {
-      throw new Error('Elite Coaching is only available for Elite tier subscribers');
+    if (tier !== 'pro') {
+      throw new Error('Elite Coaching is only available for Pro tier subscribers');
     }
 
     const context = await this.getProspectContext(prospectId, userId);
@@ -527,7 +527,7 @@ If you are curious, let me know when works. If not, no worries at all.`;
     const context = await this.getProspectContext(prospectId, userId);
     const tier = await this.getUserTier(userId);
 
-    const generated = this.buildMessage(context, messageType, tone, industry, tier === 'elite');
+    const generated = this.buildMessage(context, messageType, tone, industry, tier === 'pro');
 
     await supabase.from('ai_generated_messages').insert({
       user_id: userId,

@@ -25,6 +25,8 @@ export default function PublicChatPage({ slug, onNavigate }: PublicChatPageProps
   const [error, setError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const channelRef = useRef<any>(null);
 
   useEffect(() => {
     if (slug) {
@@ -38,6 +40,37 @@ export default function PublicChatPage({ slug, onNavigate }: PublicChatPageProps
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Real-time: Listen for new messages and reload
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const channel = supabase
+      .channel(`chat-${sessionId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'public_chat_messages',
+          filter: `session_id=eq.${sessionId}`
+        },
+        (payload) => {
+          console.log('[PublicChat] New message detected via realtime:', payload.new);
+          // Add new message to state instantly for immediate display
+          setMessages(prev => [...prev, payload.new]);
+          // Also reload to ensure consistency and get any missed messages
+          loadMessages(sessionId);
+        }
+      )
+      .subscribe();
+
+    channelRef.current = channel;
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [sessionId]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -53,27 +86,94 @@ export default function PublicChatPage({ slug, onNavigate }: PublicChatPageProps
       console.log('[PublicChat] Looking up user from chatbot ID:', slug);
       console.log('[PublicChat] Supabase client:', supabase);
 
-      const { data: chatUserId, error: slugError } = await supabase
+      let chatUserId: string | null = null;
+
+      // Try RPC function first
+      const { data: rpcUserId, error: slugError } = await supabase
         .rpc('get_user_from_chatbot_id', { p_chatbot_id: slug });
 
       console.log('[PublicChat] RPC call completed');
-      console.log('[PublicChat] Data:', chatUserId);
-      console.log('[PublicChat] Error:', slugError);
+      console.log('[PublicChat] RPC Data:', rpcUserId);
+      console.log('[PublicChat] RPC Error:', slugError);
 
-      if (slugError) {
-        console.error('[PublicChat] Chatbot ID lookup error details:', {
-          message: slugError.message,
-          details: slugError.details,
-          hint: slugError.hint,
-          code: slugError.code
-        });
-        setError(`Chat not found. Please check your link. (Error: ${slugError.message})`);
-        setIsLoading(false);
-        return;
+      if (rpcUserId) {
+        chatUserId = rpcUserId;
+        console.log('[PublicChat] ✅ Found user via RPC:', chatUserId);
+      } else {
+        // Fallback: Direct query to chatbot_links table
+        console.log('[PublicChat] ⚠️ RPC returned null, trying direct query to chatbot_links...');
+        
+        const { data: chatbotLink, error: linkError } = await supabase
+          .from('chatbot_links')
+          .select('user_id')
+          .or(`chatbot_id.eq.${slug},custom_slug.eq.${slug}`)
+          .eq('is_active', true)
+          .maybeSingle();
+
+        console.log('[PublicChat] chatbot_links query result:', chatbotLink);
+        console.log('[PublicChat] chatbot_links query error:', linkError);
+
+        if (chatbotLink && !linkError) {
+          chatUserId = chatbotLink.user_id;
+          console.log('[PublicChat] ✅ Found user via chatbot_links:', chatUserId);
+        } else {
+          // Second fallback: Check profiles.unique_user_id
+          console.log('[PublicChat] ⚠️ chatbot_links query failed, trying profiles.unique_user_id...');
+          
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('unique_user_id', slug)
+            .maybeSingle();
+
+          console.log('[PublicChat] profiles query result:', profile);
+          console.log('[PublicChat] profiles query error:', profileError);
+
+          if (profile && !profileError) {
+            chatUserId = profile.id;
+            console.log('[PublicChat] ✅ Found user via profiles.unique_user_id:', chatUserId);
+            
+            // Auto-create chatbot_link if it doesn't exist
+            const { error: createLinkError } = await supabase
+              .from('chatbot_links')
+              .insert({
+                user_id: chatUserId,
+                chatbot_id: slug,
+                is_active: true
+              });
+            
+            if (createLinkError && createLinkError.code !== '23505') { // Ignore duplicate key errors
+              console.warn('[PublicChat] ⚠️ Failed to auto-create chatbot_link:', createLinkError);
+            } else {
+              console.log('[PublicChat] ✅ Auto-created chatbot_link for slug:', slug);
+            }
+          } else {
+            console.error('[PublicChat] ❌ All lookup methods failed for slug:', slug);
+            console.error('[PublicChat] RPC Error:', slugError);
+            console.error('[PublicChat] Link Error:', linkError);
+            console.error('[PublicChat] Profile Error:', profileError);
+            
+            // Provide helpful error messages
+            let errorMessage = 'Chat not found. Please check your link.';
+            if (slugError) {
+              if (slugError.code === 'P0001' || slugError.message?.includes('not found')) {
+                errorMessage = 'Chat not found. The link may be incorrect or the chatbot may have been removed.';
+              } else if (slugError.code === '42883' || slugError.message?.includes('function')) {
+                errorMessage = 'Chat service temporarily unavailable. Please try again later.';
+              } else if (slugError.message) {
+                errorMessage = `Unable to load chat: ${slugError.message}`;
+              }
+            }
+            
+            setError(errorMessage);
+            setIsLoading(false);
+            return;
+          }
+        }
       }
 
       if (!chatUserId) {
-        console.error('[PublicChat] No user ID returned for slug:', slug);
+        console.error('[PublicChat] No user ID found for slug:', slug);
         setError('Chat not found. Please check your link.');
         setIsLoading(false);
         return;
@@ -102,34 +202,117 @@ export default function PublicChatPage({ slug, onNavigate }: PublicChatPageProps
         `visitor_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
       localStorage.setItem(`visitor_session_${slug}`, visitorSessionId);
+      console.log('[PublicChat] Visitor Session ID:', visitorSessionId);
 
-      // Check if this visitor has an active session
+      // Also check for saved session ID directly
+      const savedSessionId = localStorage.getItem(`chat_session_${slug}`);
+      console.log('[PublicChat] Saved Session ID from localStorage:', savedSessionId);
+
+      // Try to load existing session by ID first (most reliable)
+      if (savedSessionId) {
+        console.log('[PublicChat] Attempting to load saved session:', savedSessionId);
+        const { data: savedSession, error: loadError } = await supabase
+          .from('public_chat_sessions')
+          .select('*')
+          .eq('id', savedSessionId)
+          .eq('chatbot_id', slug)
+          .in('status', ['active', 'human_takeover']) // Include human_takeover status
+          .maybeSingle();
+
+        if (savedSession && !loadError) {
+          console.log('[PublicChat] Successfully restored session from localStorage:', savedSession.id);
+          setSessionId(savedSession.id);
+          await loadMessages(savedSession.id);
+          setIsLoading(false);
+          return;
+        } else {
+          console.log('[PublicChat] Saved session not found or error, will check for active session');
+          // Clear invalid session ID from localStorage
+          localStorage.removeItem(`chat_session_${slug}`);
+        }
+      }
+
+      // Check if this visitor has an active session by visitor_session_id
       console.log('[PublicChat] Checking for existing visitor session:', visitorSessionId);
-      const { data: existingSession } = await supabase
+      const { data: existingSessions } = await supabase
         .from('public_chat_sessions')
         .select('*')
         .eq('chatbot_id', slug)
         .eq('visitor_session_id', visitorSessionId)
-        .eq('status', 'active')
+        .in('status', ['active', 'human_takeover'])
+        .order('message_count', { ascending: false })
+        .order('last_message_at', { ascending: false });
+
+      if (existingSessions && existingSessions.length > 0) {
+        // Use the session with the most messages (most activity)
+        const existingSession = existingSessions[0];
+        console.log('[PublicChat] Found', existingSessions.length, 'existing sessions, using most active one:', existingSession.id);
+        
+        // Archive any duplicate sessions (keep only the most active one)
+        if (existingSessions.length > 1) {
+          console.log('[PublicChat] Archiving', existingSessions.length - 1, 'duplicate sessions...');
+          const duplicateIds = existingSessions.slice(1).map(s => s.id);
+          await supabase
+            .from('public_chat_sessions')
+            .update({ status: 'archived' })
+            .in('id', duplicateIds);
+          console.log('[PublicChat] ✅ Archived duplicate sessions:', duplicateIds);
+        }
+        
+        setSessionId(existingSession.id);
+        // Save session ID to localStorage for faster restore next time
+        localStorage.setItem(`chat_session_${slug}`, existingSession.id);
+        await loadMessages(existingSession.id);
+        setIsLoading(false);
+        return;
+      }
+
+      // Check monthly chat limit before creating new session
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('subscription_tier')
+        .eq('id', chatUserId)
         .maybeSingle();
 
-      if (existingSession) {
-        console.log('[PublicChat] Found existing session:', existingSession.id);
-        setSessionId(existingSession.id);
-        await loadMessages(existingSession.id);
+      const isProUser = profile?.subscription_tier === 'pro';
+      const chatLimit = isProUser ? 300 : 30;
+
+      // Count monthly chats
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const { count: monthlyChatCount } = await supabase
+        .from('public_chat_sessions')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', chatUserId)
+        .gte('created_at', startOfMonth.toISOString())
+        .neq('status', 'archived');
+
+      if ((monthlyChatCount || 0) >= chatLimit) {
+        console.error('[PublicChat] Monthly chat limit reached:', monthlyChatCount, '/', chatLimit);
+        setError(
+          isProUser
+            ? 'You have reached your monthly chat limit (300). Please purchase additional chats to continue.'
+            : 'You have reached your monthly chat limit (30). Upgrade to Pro for 300 chats/month.'
+        );
         setIsLoading(false);
         return;
       }
 
       // Create new session for this visitor
       console.log('[PublicChat] Creating new visitor session');
+      
+      // Generate unique session_slug with timestamp to avoid collisions
+      const timestamp = Date.now();
+      const randomSuffix = Math.random().toString(36).substr(2, 6);
+      const sessionSlug = `${slug}_${visitorSessionId}_${timestamp}_${randomSuffix}`;
+      
       const { data: newSession, error: sessionError } = await supabase
         .from('public_chat_sessions')
         .insert({
           user_id: chatUserId,
           chatbot_id: slug,
           visitor_session_id: visitorSessionId,
-          session_slug: `${slug}_${visitorSessionId}`,
+          session_slug: sessionSlug,
           channel: 'web',
           status: 'active',
           buying_intent_score: 0,
@@ -141,13 +324,76 @@ export default function PublicChatPage({ slug, onNavigate }: PublicChatPageProps
 
       if (sessionError) {
         console.error('[PublicChat] Session creation error:', sessionError);
-        setError('Failed to start chat session.');
+        
+        // Handle duplicate key error - try to find existing session
+        if (sessionError.code === '23505' && sessionError.message?.includes('session_slug')) {
+          console.log('[PublicChat] Duplicate session_slug detected, searching for existing session...');
+          
+          // Try to find existing session by visitor_session_id
+          const { data: existingSession } = await supabase
+            .from('public_chat_sessions')
+            .select('*')
+            .eq('chatbot_id', slug)
+            .eq('visitor_session_id', visitorSessionId)
+            .in('status', ['active', 'human_takeover'])
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          
+          if (existingSession) {
+            console.log('[PublicChat] Found existing session, using it:', existingSession.id);
+            setSessionId(existingSession.id);
+            localStorage.setItem(`chat_session_${slug}`, existingSession.id);
+            await loadMessages(existingSession.id);
+            setIsLoading(false);
+            return;
+          }
+          
+          // If no existing session found, try one more time with a more unique slug
+          console.log('[PublicChat] Retrying with more unique session_slug...');
+          const retrySessionSlug = `${slug}_${visitorSessionId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          const { data: retrySession, error: retryError } = await supabase
+            .from('public_chat_sessions')
+            .insert({
+              user_id: chatUserId,
+              chatbot_id: slug,
+              visitor_session_id: visitorSessionId,
+              session_slug: retrySessionSlug,
+              channel: 'web',
+              status: 'active',
+              buying_intent_score: 0,
+              qualification_score: 0,
+              message_count: 0
+            })
+            .select()
+            .single();
+          
+          if (retryError) {
+            console.error('[PublicChat] Retry session creation also failed:', retryError);
+            setError('Failed to start chat session. Please try again.');
+            setIsLoading(false);
+            return;
+          }
+          
+          console.log('[PublicChat] Successfully created session on retry:', retrySession.id);
+          setSessionId(retrySession.id);
+          localStorage.setItem(`chat_session_${slug}`, retrySession.id);
+          await sendGreeting(retrySession.id, settings);
+          setIsLoading(false);
+          return;
+        }
+        
+        setError('Failed to start chat session. Please try again.');
         setIsLoading(false);
         return;
       }
 
       console.log('[PublicChat] New session created:', newSession.id);
       setSessionId(newSession.id);
+      
+      // Save new session ID to localStorage for persistence
+      localStorage.setItem(`chat_session_${slug}`, newSession.id);
+      console.log('[PublicChat] Session ID saved to localStorage');
 
       // Send greeting message
       await sendGreeting(newSession.id, settings);
@@ -193,22 +439,39 @@ export default function PublicChatPage({ slug, onNavigate }: PublicChatPageProps
 
     const userMessage = inputMessage.trim();
     setInputMessage('');
-    setIsSending(true);
+
+    // ========================================
+    // MESSENGER-STYLE: Add user message INSTANTLY (optimistic UI)
+    // ========================================
+    const tempUserMessage: Message = {
+      id: `temp_user_${Date.now()}`,
+      sender: 'visitor',
+      message: userMessage,
+      created_at: new Date().toISOString()
+    };
+    
+    setMessages(prev => [...prev, tempUserMessage]);
+    
+    // Show AI typing indicator immediately (feels instant like Messenger)
+    setIsTyping(true);
 
     try {
       console.log('[PublicChat] ===== SENDING MESSAGE =====');
       console.log('[PublicChat] User Message:', userMessage);
-      console.log('[PublicChat] Session ID:', sessionId);
-      console.log('[PublicChat] User ID:', userId);
-      console.log('[PublicChat] Calling Edge Function directly...');
 
-      // Call Edge Function ONLY - it handles ALL message saving
-      const response = await fetch(
+      // ========================================
+      // MESSENGER-STYLE: Minimum typing delay for natural feel
+      // ========================================
+      const startTime = Date.now();
+      
+      // Call Edge Function to get AI response
+      const responsePromise = fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-chatbot-chat`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
             'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
           },
           body: JSON.stringify({
@@ -219,32 +482,37 @@ export default function PublicChatPage({ slug, onNavigate }: PublicChatPageProps
         }
       );
 
-      // Turn off send button animation immediately after request sent
-      setIsSending(false);
-
-      // Show AI typing indicator only after send button completes
-      setIsTyping(true);
+      // Minimum typing time for natural feel (1.5-2 seconds)
+      const minTypingTime = 1500 + Math.random() * 500;
+      
+      // Wait for both API response AND minimum typing time
+      const [response] = await Promise.all([
+        responsePromise,
+        new Promise(resolve => setTimeout(resolve, minTypingTime))
+      ]);
 
       if (!response.ok) {
         const errorData = await response.text();
         console.error('[PublicChat] Edge Function error:', response.status, errorData);
-        setIsTyping(false);
         throw new Error(`Server error: ${response.statusText}`);
       }
 
       const result = await response.json();
-      console.log('[PublicChat] Edge Function response:', result);
+      console.log('[PublicChat] AI response received');
 
-      // Reload all messages from database (Edge Function already saved them)
-      console.log('[PublicChat] Edge Function complete, reloading messages...');
-      await loadMessages(sessionId);
+      // Remove typing indicator
       setIsTyping(false);
+
+      // Reload messages from database (includes AI response)
+      await loadMessages(sessionId);
+      
       console.log('[PublicChat] ===== MESSAGE SENT COMPLETE =====');
 
     } catch (error) {
-      console.error('[PublicChat] Critical error in handleSendMessage:', error);
+      console.error('[PublicChat] Error:', error);
       setIsTyping(false);
-      setIsSending(false);
+      // Remove temp message on error
+      setMessages(prev => prev.filter(m => m.id !== tempUserMessage.id));
       alert('Failed to send message. Please try again.');
     }
   };
@@ -261,6 +529,17 @@ export default function PublicChatPage({ slug, onNavigate }: PublicChatPageProps
     );
   }
 
+  const handleRetry = async () => {
+    setError(null);
+    setIsLoading(true);
+    // Clear any cached session data that might be causing issues
+    if (slug) {
+      localStorage.removeItem(`chat_session_${slug}`);
+      localStorage.removeItem(`visitor_session_${slug}`);
+    }
+    await initializeChat();
+  };
+
   if (error) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-cyan-50 flex items-center justify-center p-4">
@@ -270,12 +549,28 @@ export default function PublicChatPage({ slug, onNavigate }: PublicChatPageProps
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Unable to Load Chat</h2>
           <p className="text-gray-600 mb-6">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors"
-          >
-            Retry
-          </button>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={handleRetry}
+              disabled={isLoading}
+              className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Retrying...
+                </>
+              ) : (
+                'Retry'
+              )}
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-6 py-3 bg-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-300 transition-colors"
+            >
+              Reload Page
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -373,26 +668,65 @@ export default function PublicChatPage({ slug, onNavigate }: PublicChatPageProps
             <input
               type="text"
               value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
+              onChange={(e) => {
+                setInputMessage(e.target.value);
+                
+                // Broadcast typing indicator to admin (like Messenger)
+                if (sessionId && channelRef.current) {
+                  // Clear previous timeout
+                  if (typingTimeoutRef.current) {
+                    clearTimeout(typingTimeoutRef.current);
+                  }
+                  
+                  // Broadcast typing event
+                  channelRef.current.send({
+                    type: 'broadcast',
+                    event: 'visitor_typing',
+                    payload: { sessionId, isTyping: true }
+                  });
+                  
+                  // Stop broadcasting after 1 second of inactivity
+                  typingTimeoutRef.current = setTimeout(() => {
+                    if (channelRef.current) {
+                      channelRef.current.send({
+                        type: 'broadcast',
+                        event: 'visitor_typing',
+                        payload: { sessionId, isTyping: false }
+                      });
+                    }
+                  }, 1000);
+                }
+              }}
               onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
               placeholder="Type your message..."
-              className="flex-1 px-4 py-3 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              className="flex-1 px-4 py-3 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm transition-all"
             />
             <button
               onClick={handleSendMessage}
-              disabled={!inputMessage.trim() || isSending}
-              className="w-12 h-12 bg-blue-600 text-white rounded-full flex items-center justify-center hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+              disabled={!inputMessage.trim() || isTyping}
+              className="w-12 h-12 bg-blue-600 text-white rounded-full flex items-center justify-center hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform active:scale-95 flex-shrink-0"
+              title="Send message"
             >
-              {isSending ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Send className="w-5 h-5" />
-              )}
+              <Send className="w-5 h-5" />
             </button>
           </div>
-          <p className="text-center text-xs text-gray-400 mt-3">
-            Powered by <span className="font-semibold text-blue-600">NexScout AI</span>
-          </p>
+          <div className="text-center mt-3 space-y-1">
+            <p className="text-xs text-gray-600 font-medium">
+              Want AI like this for your business? 🚀
+            </p>
+            <p className="text-xs text-gray-500">
+              Powered by{' '}
+              <a 
+                href={import.meta.env.VITE_APP_URL || 'https://nexscout.co'} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="font-bold text-blue-600 hover:text-blue-700 hover:underline transition-colors"
+              >
+                NexScout AI
+              </a>
+              {' '}· Turn visitors into customers 24/7
+            </p>
+          </div>
         </div>
       </div>
     </div>

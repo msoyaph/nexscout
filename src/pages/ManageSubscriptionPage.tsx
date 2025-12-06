@@ -60,7 +60,7 @@ export default function ManageSubscriptionPage({ onBack, onNavigate }: ManageSub
 
   // Map elite to pro since elite is discontinued
   const rawTier = profile?.subscription_tier || SUBSCRIPTION_TIERS.STARTER;
-  const tier = rawTier === 'elite' ? SUBSCRIPTION_TIERS.PRO : rawTier;
+  const tier = rawTier; // Elite tier removed, no mapping needed
   const pricing = TIER_PRICING[tier as keyof typeof TIER_PRICING] || TIER_PRICING[SUBSCRIPTION_TIERS.PRO];
 
   useEffect(() => {

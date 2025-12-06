@@ -55,7 +55,7 @@ export default function DashboardHome() {
   const [subscriptionBreakdown, setSubscriptionBreakdown] = useState({
     free: 0,
     pro: 0,
-    elite: 0,
+    // elite: 0, // Removed
     team: 0,
     enterprise: 0
   });
@@ -234,7 +234,7 @@ export default function DashboardHome() {
     const breakdown = {
       free: 0,
       pro: 0,
-      elite: 0,
+      // elite: 0, // Removed
       team: 0,
       enterprise: 0
     };
