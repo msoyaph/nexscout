@@ -61,8 +61,18 @@ export default function NewSignupPage({ onNavigateToLogin, onSignupSuccess }: Ne
       console.log('[NewSignup] Starting signup via admin endpoint for:', email);
 
       // Call admin-signup edge function (bypasses ALL Supabase Auth restrictions!)
+      // Normalize URL to ensure HTTPS and remove trailing slashes
+      let supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+      supabaseUrl = supabaseUrl.trim().replace(/\/+$/, ''); // Remove trailing slashes
+      if (supabaseUrl.startsWith('http://')) {
+        supabaseUrl = supabaseUrl.replace('http://', 'https://'); // Force HTTPS
+      }
+      if (!supabaseUrl.startsWith('https://')) {
+        supabaseUrl = `https://${supabaseUrl}`;
+      }
+      
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-signup`,
+        `${supabaseUrl}/functions/v1/admin-signup`,
         {
           method: 'POST',
           headers: {
