@@ -10,6 +10,7 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false, // Disable sourcemaps in production for smaller bundle
+    chunkSizeWarningLimit: 1000, // Increase warning limit to 1000KB (1MB)
     rollupOptions: {
       output: {
         manualChunks: {
