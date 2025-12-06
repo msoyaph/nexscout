@@ -122,11 +122,15 @@ export default function DashboardHome() {
   const loadFinancialStats = async () => {
     // Get daily summary for today
     const today = new Date().toISOString().split('T')[0];
-    const { data: summary } = await supabase
+    const { data: summary, error: summaryError } = await supabase
       .from('analytics_daily_summary')
       .select('revenue_php')
       .eq('date', today)
-      .single();
+      .maybeSingle();
+    
+    if (summaryError) {
+      console.error('[DashboardHome] Error loading daily summary:', summaryError);
+    }
 
     // Calculate MRR from active subscriptions
     const { data: subscriptions } = await supabase
@@ -204,11 +208,16 @@ export default function DashboardHome() {
       .limit(3);
 
     for (const event of subEvents || []) {
-      const { data: user } = await supabase
+      const { data: user, error: userError } = await supabase
         .from('user_profiles')
         .select('full_name')
         .eq('id', event.user_id)
-        .single();
+        .maybeSingle();
+
+      if (userError) {
+        console.error('[DashboardHome] Error loading user for activity:', userError);
+        continue;
+      }
 
       if (event.event_type === 'upgraded') {
         activities.push({

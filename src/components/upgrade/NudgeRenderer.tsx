@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNudge } from '../../contexts/NudgeContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { UpgradeBanner } from './UpgradeBanner';
 import { UpgradeModal } from './UpgradeModal';
 
@@ -9,6 +10,7 @@ import { UpgradeModal } from './UpgradeModal';
  */
 export function NudgeRenderer() {
   const { nudgeState, dismissNudge, goToUpgrade } = useNudge();
+  const { profile } = useAuth();
 
   const { isVisible, config } = nudgeState;
 
@@ -24,6 +26,7 @@ export function NudgeRenderer() {
         onDismiss={config.dismissible ? dismissNudge : undefined}
         autoDismiss={config.dismissible}
         autoDismissDelay={8000}
+        coins={profile?.coin_balance}
       />
     );
   }

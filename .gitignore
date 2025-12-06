@@ -68,3 +68,5 @@ dist.zip
 # Optional: Uncomment if you want to exclude documentation files
 # *.md
 # !README.md
+.vercel
+.env*.local

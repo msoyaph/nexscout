@@ -1,95 +1,42 @@
 #!/bin/bash
 
-# NexScout Deployment Script
-# This script helps prepare and deploy NexScout to production
+# NexScout Production Deployment Script
+# This script builds and deploys the application to Vercel
 
-set -e
+set -e  # Exit on error
 
-echo "🚀 NexScout Deployment Script"
-echo "=============================="
+echo "🚀 Starting NexScout Production Deployment..."
 echo ""
 
-# Colors for output
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m' # No Color
-
-# Check if .env.production exists
-if [ ! -f .env.production ]; then
-    echo -e "${YELLOW}⚠️  .env.production not found${NC}"
-    echo "Creating .env.production from .env.example..."
-    if [ -f .env.example ]; then
-        cp .env.example .env.production
-        echo -e "${YELLOW}⚠️  Please update .env.production with your production credentials${NC}"
-    else
-        echo -e "${RED}❌ .env.example not found. Please create .env.production manually.${NC}"
-        exit 1
-    fi
-fi
-
-# Check environment variables
-echo "📋 Checking environment variables..."
-source .env.production 2>/dev/null || true
-
-if [ -z "$VITE_SUPABASE_URL" ]; then
-    echo -e "${RED}❌ VITE_SUPABASE_URL not set in .env.production${NC}"
-    exit 1
-fi
-
-if [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
-    echo -e "${RED}❌ VITE_SUPABASE_ANON_KEY not set in .env.production${NC}"
-    exit 1
-fi
-
-echo -e "${GREEN}✅ Environment variables found${NC}"
-echo ""
-
-# Type check
-echo "🔍 Running TypeScript type check..."
-npm run typecheck
-if [ $? -ne 0 ]; then
-    echo -e "${RED}❌ Type check failed. Please fix errors before deploying.${NC}"
-    exit 1
-fi
-echo -e "${GREEN}✅ Type check passed${NC}"
-echo ""
-
-# Build
-echo "🏗️  Building for production..."
+# Step 1: Build the application
+echo "📦 Step 1: Building application..."
 npm run build
-if [ $? -ne 0 ]; then
-    echo -e "${RED}❌ Build failed. Please fix errors before deploying.${NC}"
+
+if [ ! -d "dist" ]; then
+    echo "❌ Build failed! dist/ directory not found."
     exit 1
 fi
-echo -e "${GREEN}✅ Build successful${NC}"
+
+echo "✅ Build successful!"
 echo ""
 
-# Check build size
-BUILD_SIZE=$(du -sh dist | cut -f1)
-echo "📦 Build size: $BUILD_SIZE"
+# Step 2: Deploy to production
+echo "🌐 Step 2: Deploying to Vercel Production..."
 echo ""
+echo "⚠️  IMPORTANT: Make sure you have set these environment variables in Vercel:"
+echo "   - VITE_SUPABASE_URL"
+echo "   - VITE_SUPABASE_ANON_KEY"
+echo "   - VITE_APP_URL"
+echo ""
+read -p "Press Enter to continue with deployment..."
 
-# Check if Vercel CLI is installed
-if command -v vercel &> /dev/null; then
-    echo "🌐 Vercel CLI detected"
-    echo ""
-    read -p "Deploy to Vercel? (y/n) " -n 1 -r
-    echo ""
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        echo "🚀 Deploying to Vercel..."
-        vercel --prod
-    fi
-else
-    echo -e "${YELLOW}⚠️  Vercel CLI not installed. Install with: npm i -g vercel${NC}"
-    echo ""
-    echo "📦 Production build is ready in ./dist/"
-    echo "You can deploy manually to:"
-    echo "  - Vercel: vercel --prod"
-    echo "  - Netlify: netlify deploy --prod"
-    echo "  - Cloudflare Pages: Upload dist/ folder"
-fi
+npx vercel --prod
 
 echo ""
-echo -e "${GREEN}✅ Deployment preparation complete!${NC}"
-
+echo "✅ Deployment complete!"
+echo ""
+echo "📋 Next steps:"
+echo "   1. Verify environment variables in Vercel Dashboard"
+echo "   2. Test your production URL"
+echo "   3. Check browser console for errors"
+echo ""

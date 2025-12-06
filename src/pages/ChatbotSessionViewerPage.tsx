@@ -179,17 +179,24 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
 
   async function loadCoinBalance() {
     try {
+      if (!user?.id) return;
+      
       const { data, error } = await supabase
         .from('profiles')
         .select('coin_balance')
-        .eq('id', user?.id)
-        .single();
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error('[ChatbotSessionViewer] Error loading coin balance:', error);
+        return;
+      }
 
       if (data) {
         setCoinBalance(data.coin_balance || 0);
       }
     } catch (error) {
-      console.error('Error loading coin balance:', error);
+      console.error('[ChatbotSessionViewer] Unexpected error loading coin balance:', error);
     }
   }
 

@@ -671,7 +671,10 @@ export default function SettingsPage({ onBack, onNavigate }: SettingsPageProps) 
           </div>
           <div className="divide-y divide-gray-200">
             <button
-              onClick={() => onNavigate?.('terms-of-service')}
+              onClick={() => {
+                // Navigate to public URL for Facebook App Development requirements
+                window.location.href = '/terms';
+              }}
               className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
             >
               <div className="flex items-center gap-3">
@@ -681,7 +684,10 @@ export default function SettingsPage({ onBack, onNavigate }: SettingsPageProps) 
               <ArrowLeft className="size-5 text-gray-600 rotate-180" />
             </button>
             <button
-              onClick={() => onNavigate?.('privacy-policy')}
+              onClick={() => {
+                // Navigate to public URL for Facebook App Development requirements
+                window.location.href = '/privacy';
+              }}
               className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
             >
               <div className="flex items-center gap-3">

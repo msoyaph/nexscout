@@ -33,6 +33,7 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
   const [showPhotoUpload, setShowPhotoUpload] = useState(false);
   const [prospect, setProspect] = useState<any>(initialProspect);
   const [loading, setLoading] = useState(!initialProspect && !!prospectId);
+  const [error, setError] = useState<string | null>(null);
   const [regeneratingScore, setRegeneratingScore] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [upgradeFeature, setUpgradeFeature] = useState<'sequence' | 'deck' | 'deepscan' | 'automation'>('sequence');
@@ -62,17 +63,26 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
   useEffect(() => {
     if (prospectId && user && prospect?.id) {
       const refreshPipelineStatus = async () => {
-        const { data } = await supabase
-          .from('prospects')
-          .select('pipeline_stage')
-          .eq('id', prospectId)
-          .single();
-        
-        if (data) {
-          setProspect((prev: any) => ({
-            ...prev,
-            pipeline_stage: data.pipeline_stage
-          }));
+        try {
+          const { data, error } = await supabase
+            .from('prospects')
+            .select('pipeline_stage')
+            .eq('id', prospectId)
+            .maybeSingle();
+          
+          if (error) {
+            console.error('[ProspectDetail] Error refreshing pipeline status:', error);
+            return;
+          }
+          
+          if (data) {
+            setProspect((prev: any) => ({
+              ...prev,
+              pipeline_stage: data.pipeline_stage
+            }));
+          }
+        } catch (error) {
+          console.error('[ProspectDetail] Unexpected error refreshing pipeline status:', error);
         }
       };
       
@@ -85,13 +95,25 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
 
   async function loadProspect() {
     try {
+      setLoading(true);
       const { data, error } = await supabase
         .from('prospects')
         .select('*')
         .eq('id', prospectId)
-        .single();
+        .maybeSingle();
 
-      if (error) throw error;
+      if (error) {
+        console.error('[ProspectDetail] Error loading prospect:', error);
+        setError('Failed to load prospect. Please try again.');
+        setLoading(false);
+        return;
+      }
+
+      if (!data) {
+        setError('Prospect not found.');
+        setLoading(false);
+        return;
+      }
 
       if (data) {
         setProspect({
@@ -190,6 +212,43 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
         <div className="text-center">
           <div className="inline-block size-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4" />
           <p className="text-gray-600">Loading prospect...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center max-w-md px-6">
+          <div className="inline-block size-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
+            <svg className="size-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Error Loading Prospect</h2>
+          <p className="text-gray-600 mb-6">{error}</p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => {
+                setError(null);
+                if (prospectId) {
+                  loadProspect();
+                } else {
+                  onBack();
+                }
+              }}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+            >
+              {prospectId ? 'Retry' : 'Go Back'}
+            </button>
+            <button
+              onClick={onBack}
+              className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
+            >
+              Go Back
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -660,20 +719,29 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
           onProspectUpdated={async () => {
             if (prospectId) {
               await loadProspect();
-            } else if (prospect) {
+            } else if (prospect?.id) {
               // Refresh prospect data
-              const { data } = await supabase
-                .from('prospects')
-                .select('*')
-                .eq('id', prospect.id)
-                .single();
-              
-              if (data) {
-                setProspect({
-                  ...prospect,
-                  ...data,
-                  metadata: data.metadata || {}
-                });
+              try {
+                const { data, error } = await supabase
+                  .from('prospects')
+                  .select('*')
+                  .eq('id', prospect.id)
+                  .maybeSingle();
+                
+                if (error) {
+                  console.error('[ProspectDetail] Error refreshing prospect after update:', error);
+                  return;
+                }
+                
+                if (data) {
+                  setProspect({
+                    ...prospect,
+                    ...data,
+                    metadata: data.metadata || {}
+                  });
+                }
+              } catch (error) {
+                console.error('[ProspectDetail] Unexpected error refreshing prospect:', error);
               }
             }
           }}

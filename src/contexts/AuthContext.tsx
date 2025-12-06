@@ -173,7 +173,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      // Clear local state first (so UI updates immediately)
+      setUser(null);
+      setSession(null);
+      setProfile(null);
+      
+      // Try to sign out from Supabase (may fail due to CORS/403, but that's okay)
+      // We clear local state first so the user is logged out regardless
+      try {
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+          console.warn('[AuthContext] Sign out API error (local state already cleared):', error);
+        }
+      } catch (apiError) {
+        console.warn('[AuthContext] Sign out API exception (local state already cleared):', apiError);
+      }
+      
+      // Clear cached auth data from localStorage
+      try {
+        // Supabase stores auth tokens with a specific key pattern
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+        const projectRef = supabaseUrl.split('//')[1]?.split('.')[0] || 'supabase';
+        const storageKey = `sb-${projectRef}-auth-token`;
+        localStorage.removeItem(storageKey);
+        sessionStorage.clear();
+      } catch (storageError) {
+        // Ignore storage errors - not critical
+      }
+    } catch (error) {
+      console.error('[AuthContext] Sign out exception:', error);
+      // Ensure state is cleared even on exception
+      setUser(null);
+      setSession(null);
+      setProfile(null);
+    }
   };
 
   return (

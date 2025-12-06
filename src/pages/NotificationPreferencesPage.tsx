@@ -61,15 +61,18 @@ export default function NotificationPreferencesPage({ onBack }: NotificationPref
         .from('profiles')
         .select('notification_preferences')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
-      if (error) throw error;
+      if (error) {
+        console.error('[NotificationPreferences] Error loading preferences:', error);
+        return;
+      }
 
       if (data?.notification_preferences) {
         setPreferences({ ...preferences, ...data.notification_preferences });
       }
     } catch (error) {
-      console.error('Error loading preferences:', error);
+      console.error('[NotificationPreferences] Unexpected error loading preferences:', error);
     } finally {
       setLoading(false);
     }

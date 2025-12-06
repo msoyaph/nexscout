@@ -1,14 +1,12 @@
 /**
- * AI Config Wizard - 5-Step Guided Setup
+ * AI Config Wizard - 3-Step Guided Setup
  * Step 1: Company Information
- * Step 2: Your Products
- * Step 3: Contact Information
- * Step 4: AI Magic Auto-Configured (Preview)
- * Step 5: AI System Template (Review & Customize)
+ * Step 2: Contact Information
+ * Step 3: AI Magic Auto-Configured & System Template (Combined)
  */
 
 import { useState, useEffect } from 'react';
-import { Sparkles, Upload, Globe, Phone, Mail, ChevronLeft, ChevronRight, Check, Zap, Building2, Package, MessageCircle, Settings, LogOut } from 'lucide-react';
+import { Sparkles, Phone, Mail, ChevronLeft, ChevronRight, Check, Zap, Building2, MessageCircle, Settings, LogOut } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -31,7 +29,7 @@ export default function AIConfigWizard({
   onComplete,
   onSkip
 }: AIConfigWizardProps) {
-  const { signOut } = useAuth();
+  const { signOut, refreshProfile } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [matchedTemplate, setMatchedTemplate] = useState<any | null>(null);
@@ -40,7 +38,7 @@ export default function AIConfigWizard({
   // Form State
   const [companyDesc, setCompanyDesc] = useState('');
   const [products, setProducts] = useState([{ name: '', description: '', image: null as File | null }]);
-  const [contactInfo, setContactInfo] = useState({ phone: '', email: userEmail, website: '' });
+  const [contactInfo, setContactInfo] = useState({ phone: '', email: userEmail });
   const [aiInstructions, setAiInstructions] = useState('');
   const [useTemplateInstructions, setUseTemplateInstructions] = useState(true);
   const [showInstructionsModal, setShowInstructionsModal] = useState(false);
@@ -53,11 +51,36 @@ export default function AIConfigWizard({
     microCTAs: getDefaultMicroCTAs(industry),
   });
 
-  const totalSteps = 5;
+  const totalSteps = 3;
 
   useEffect(() => {
     loadTemplateData();
+    loadProfileContactInfo();
   }, [userId]);
+
+  // Load existing phone and email from user's profile
+  async function loadProfileContactInfo() {
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('phone, email')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (!error && profile) {
+        setContactInfo({
+          phone: profile.phone || '',
+          email: profile.email || userEmail,
+        });
+        console.log('[AIConfigWizard] Loaded contact info from profile:', {
+          phone: profile.phone || 'not set',
+          email: profile.email || userEmail
+        });
+      }
+    } catch (err) {
+      console.error('[AIConfigWizard] Error loading profile contact info:', err);
+    }
+  }
 
   async function loadTemplateData() {
     try {
@@ -144,19 +167,31 @@ export default function AIConfigWizard({
         ? editableInstructions 
         : buildSystemInstructions();
       
+      console.log('[AIConfigWizard] Saving instructions:', {
+        length: finalInstructions.length,
+        useTemplate: useTemplateInstructions,
+        hasTemplate: !!editableInstructions
+      });
+
       // First, delete any existing chatbot_settings to avoid duplicate key error
       await supabase
         .from('chatbot_settings')
         .delete()
         .eq('user_id', userId);
 
-      // Then insert fresh
+      // Then insert fresh with template instructions and toggles ON by default
       const { error } = await supabase
         .from('chatbot_settings')
         .insert({
           user_id: userId,
           tone: autoSettings.tone,
           is_configured: true,
+          // Save template instructions to custom_system_instructions
+          custom_system_instructions: finalInstructions,
+          // Enable Custom Instructions by default (ON)
+          use_custom_instructions: true,
+          // Override Intelligence by default (ON)
+          instructions_override_intelligence: true,
         });
 
       if (error) {
@@ -164,13 +199,31 @@ export default function AIConfigWizard({
         throw error;
       }
       
-      console.log('[AIConfigWizard] ✅ Chatbot configured!');
+      console.log('[AIConfigWizard] ✅ Chatbot configured with template instructions!');
+      console.log('[AIConfigWizard] ✅ Custom Instructions: ON, Override Intelligence: ON');
 
-      // Mark onboarding complete
-      await supabase
+      // Save phone and email to profiles table (synced with Edit Profile)
+      const { error: profileError } = await supabase
         .from('profiles')
-        .update({ onboarding_completed: true })
+        .update({
+          phone: contactInfo.phone || null,
+          email: contactInfo.email || userEmail,
+          onboarding_completed: true,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', userId);
+
+      if (profileError) {
+        console.error('[AIConfigWizard] Profile update error:', profileError);
+        // Don't throw - this is not critical for onboarding completion
+      } else {
+        console.log('[AIConfigWizard] ✅ Contact info saved to profile:', {
+          phone: contactInfo.phone || 'not set',
+          email: contactInfo.email
+        });
+        // Refresh profile to sync with other parts of the app
+        await refreshProfile();
+      }
 
       console.log('[AIConfigWizard] ✅ AI configured and onboarding complete!');
       onComplete();
@@ -193,7 +246,6 @@ ${products.filter(p => p.name).map(p => `- ${p.name}: ${p.description}`).join('\
 **Contact:**
 - Email: ${contactInfo.email}
 ${contactInfo.phone ? `- Phone: ${contactInfo.phone}` : ''}
-${contactInfo.website ? `- Website: ${contactInfo.website}` : ''}
 
 **Tone:** ${autoSettings.tone}
 
@@ -206,10 +258,8 @@ ${autoSettings.microCTAs.join('\n')}`;
 
   const steps = [
     { number: 1, title: 'Company Information', icon: Building2 },
-    { number: 2, title: 'Your Products', icon: Package },
-    { number: 3, title: 'Contact Information', icon: MessageCircle },
-    { number: 4, title: 'AI Magic Auto-Configured', icon: Sparkles },
-    { number: 5, title: 'AI System Template', icon: Settings },
+    { number: 2, title: 'Contact Information', icon: MessageCircle },
+    { number: 3, title: 'AI Configuration', icon: Sparkles },
   ];
 
   const canGoNext = () => {
@@ -326,110 +376,8 @@ ${autoSettings.microCTAs.join('\n')}`;
               </div>
             )}
 
-            {/* Step 2: Your Products */}
+            {/* Step 2: Contact Information */}
             {currentStep === 2 && (
-              <div className="space-y-6">
-                <div className="text-center mb-6">
-                  <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                    <Package className="w-8 h-8 inline mr-2 text-purple-500" />
-                    Your Products
-                  </h2>
-                  <p className="text-gray-600">Add at least 1 product to get started</p>
-                </div>
-
-                {loadingTemplate && products.length > 1 && (
-                  <div className="p-4 bg-green-50 rounded-xl border-2 border-green-200 mb-4">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-5 h-5 text-green-600" />
-                      <p className="text-sm font-semibold text-green-900">
-                        ✨ {products.length} Products Loaded from Millennium Soya Template!
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="space-y-4">
-                  {products.map((product, index) => (
-                    <div key={index} className="p-6 bg-purple-50 rounded-2xl border-2 border-purple-200 space-y-4">
-                      <div className="flex justify-between items-center mb-3">
-                        <h3 className="font-semibold text-purple-900">Product {index + 1}</h3>
-                        {index > 0 && (
-                          <button
-                            onClick={() => setProducts(products.filter((_, i) => i !== index))}
-                            className="text-sm text-red-600 hover:text-red-700"
-                          >
-                            Remove
-                          </button>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Product Name *
-                        </label>
-                        <input
-                          type="text"
-                          value={product.name}
-                          onChange={(e) => {
-                            const newProducts = [...products];
-                            newProducts[index].name = e.target.value;
-                            setProducts(newProducts);
-                          }}
-                          placeholder="C24/7 Natura-Ceuticals"
-                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Short description *
-                        </label>
-                        <textarea
-                          value={product.description}
-                          onChange={(e) => {
-                            const newProducts = [...products];
-                            newProducts[index].description = e.target.value;
-                            setProducts(newProducts);
-                          }}
-                          placeholder="22,000+ nutrients in one capsule. Boosts immunity, energy, and overall health. ₱2,500/box"
-                          rows={3}
-                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Product Image (Optional)
-                        </label>
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                              const newProducts = [...products];
-                              newProducts[index].image = e.target.files?.[0] || null;
-                              setProducts(newProducts);
-                            }}
-                            className="text-sm text-gray-600"
-                          />
-                          <Upload className="w-5 h-5 text-gray-400" />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-
-                  <button
-                    onClick={() => setProducts([...products, { name: '', description: '', image: null }])}
-                    className="w-full py-3 border-2 border-dashed border-purple-300 hover:border-purple-500 rounded-xl text-purple-600 font-semibold transition-colors"
-                  >
-                    + Add Another Product
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Step 3: Contact Information */}
-            {currentStep === 3 && (
               <div className="space-y-6">
                 <div className="text-center mb-6">
                   <h2 className="text-2xl font-bold text-gray-900 mb-2">
@@ -452,6 +400,9 @@ ${autoSettings.microCTAs.join('\n')}`;
                       placeholder="+63 912 345 6789"
                       className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                     />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Used for SMS campaigns, text notifications, and authentication
+                    </p>
                   </div>
 
                   <div>
@@ -465,204 +416,144 @@ ${autoSettings.microCTAs.join('\n')}`;
                       onChange={(e) => setContactInfo({ ...contactInfo, email: e.target.value })}
                       className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                     />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      <Globe className="w-4 h-4 inline mr-2" />
-                      Website Link
-                    </label>
-                    <input
-                      type="url"
-                      value={contactInfo.website}
-                      onChange={(e) => setContactInfo({ ...contactInfo, website: e.target.value })}
-                      placeholder="https://yourwebsite.com"
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Used for email marketing, notifications, and authentication
+                    </p>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Step 4: AI Magic Auto-Configured */}
-            {currentStep === 4 && (
-              <div className="space-y-6">
-                <div className="text-center mb-6">
+            {/* Step 3: AI Magic Auto-Configured & System Template (Combined) */}
+            {currentStep === 3 && (
+              <div className="space-y-4">
+                <div className="text-center mb-4">
                   <h2 className="text-2xl font-bold text-gray-900 mb-2">
                     <Sparkles className="w-8 h-8 inline mr-2 text-green-500" />
-                    AI Magic Auto-Configured
+                    AI Configuration
                   </h2>
-                  <p className="text-gray-600">We've set these up for you based on your industry</p>
+                  <p className="text-gray-600">Review your AI settings and template</p>
                 </div>
 
-                <div className="p-6 bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl border-2 border-green-200">
-                  <div className="flex items-start gap-4 mb-6">
-                    <div className="flex-shrink-0 w-12 h-12 bg-green-500 rounded-xl flex items-center justify-center">
-                      <Zap className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-green-900 mb-1">✨ Automatically Configured</h3>
-                      <p className="text-sm text-green-700">Based on "{industry}", we optimized these settings for you</p>
+                {/* Compact Auto-Configured Section - Facebook Inspired */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 bg-gradient-to-r from-green-50 to-emerald-50 border-b border-green-100">
+                    <div className="flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-green-600" />
+                      <span className="text-sm font-semibold text-green-900">✨ Automatically Configured</span>
+                      <span className="text-xs text-green-700 ml-auto">Based on "{industry}"</span>
                     </div>
                   </div>
-
-                  <div className="space-y-4">
-                    <div className="bg-white rounded-xl p-4">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm font-semibold text-gray-700">Conversation Tone</span>
-                        <span className="px-3 py-1 bg-blue-100 text-blue-700 text-sm font-semibold rounded-full">
-                          {autoSettings.tone === 'taglish' ? 'Taglish (Warm & Human)' : 'Professional'}
-                        </span>
+                  
+                  <div className="p-4 space-y-3">
+                    {/* Conversation Tone - Compact Card */}
+                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div className="flex-1">
+                        <div className="text-xs font-semibold text-gray-700 mb-0.5">Conversation Tone</div>
+                        <div className="text-xs text-gray-500">
+                          {autoSettings.tone === 'taglish' 
+                            ? 'Perfect for Filipino market - uses "po", casual mix of English/Tagalog' 
+                            : 'Professional and friendly tone'}
+                        </div>
                       </div>
-                      <p className="text-xs text-gray-500">
-                        {autoSettings.tone === 'taglish' 
-                          ? 'Perfect for Filipino market - uses "po", casual mix of English/Tagalog' 
-                          : 'Professional and friendly tone'}
-                      </p>
+                      <span className="px-2.5 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full whitespace-nowrap ml-3">
+                        {autoSettings.tone === 'taglish' ? 'Taglish (Warm & Human)' : 'Professional'}
+                      </span>
                     </div>
 
-                    <div className="bg-white rounded-xl p-4">
-                      <div className="text-sm font-semibold text-gray-700 mb-2">Sales Chat Flow</div>
-                      <div className="text-xs text-gray-600 whitespace-pre-line">
+                    {/* Sales Chat Flow - Compact */}
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <div className="text-xs font-semibold text-gray-700 mb-1.5">Sales Chat Flow</div>
+                      <div className="text-xs text-gray-600 leading-relaxed line-clamp-3">
                         {autoSettings.chatFlow}
                       </div>
                     </div>
 
-                    <div className="bg-white rounded-xl p-4">
-                      <div className="text-sm font-semibold text-gray-700 mb-2">
+                    {/* Micro CTAs - Compact */}
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <div className="text-xs font-semibold text-gray-700 mb-1.5">
                         Ready-to-Use Micro CTAs ({autoSettings.microCTAs.length})
                       </div>
                       <div className="space-y-1">
-                        {autoSettings.microCTAs.slice(0, 3).map((cta, i) => (
-                          <div key={i} className="text-xs text-gray-600 flex items-center gap-2">
-                            <Check className="w-3 h-3 text-green-500" />
-                            {cta}
+                        {autoSettings.microCTAs.slice(0, 2).map((cta, i) => (
+                          <div key={i} className="text-xs text-gray-600 flex items-start gap-1.5">
+                            <Check className="w-3 h-3 text-green-500 mt-0.5 flex-shrink-0" />
+                            <span className="line-clamp-1">{cta}</span>
                           </div>
                         ))}
-                        {autoSettings.microCTAs.length > 3 && (
-                          <div className="text-xs text-gray-500 italic">
-                            ...and {autoSettings.microCTAs.length - 3} more
+                        {autoSettings.microCTAs.length > 2 && (
+                          <div className="text-xs text-gray-500 italic pl-4.5">
+                            +{autoSettings.microCTAs.length - 2} more
                           </div>
                         )}
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
 
-            {/* Step 5: AI System Template */}
-            {currentStep === 5 && (
-              <div className="space-y-6">
-                <div className="text-center mb-6">
-                  <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                    <Settings className="w-8 h-8 inline mr-2 text-purple-500" />
-                    AI System Template
-                  </h2>
-                  <p className="text-gray-600">
-                    {aiInstructions ? 'Review and customize your AI' : 'Final review before activation'}
-                  </p>
-                </div>
-
+                {/* AI System Template Section */}
                 {aiInstructions ? (
-                  <div className="space-y-4">
-                    {/* Toggle Section */}
-                    <div className="p-6 bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border-2 border-purple-200">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                          <div className="flex-shrink-0 w-10 h-10 bg-purple-500 rounded-xl flex items-center justify-center">
-                            <Sparkles className="w-5 h-5 text-white" />
-                          </div>
-                          <div>
-                            <h3 className="font-bold text-purple-900">
-                              {companyName} AI System Instructions
-                            </h3>
-                            <p className="text-xs text-purple-700">
-                              Pre-configured template with Taglish, sales flow, micro CTAs
-                            </p>
-                          </div>
+                  <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                    <div className="px-4 py-3 bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-purple-600" />
+                          <span className="text-sm font-semibold text-purple-900">{companyName} AI System Instructions</span>
                         </div>
-
-                        {/* Toggle Switch */}
                         <button
                           onClick={() => setUseTemplateInstructions(!useTemplateInstructions)}
-                          className={`relative inline-flex h-7 w-14 items-center rounded-full transition-colors ${
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                             useTemplateInstructions ? 'bg-green-500' : 'bg-gray-300'
                           }`}
                         >
                           <span
-                            className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
-                              useTemplateInstructions ? 'translate-x-8' : 'translate-x-1'
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                              useTemplateInstructions ? 'translate-x-6' : 'translate-x-1'
                             }`}
                           />
                         </button>
                       </div>
+                    </div>
 
-                      <div className={`transition-all ${useTemplateInstructions ? 'opacity-100' : 'opacity-50'}`}>
-                        <div className="bg-white rounded-xl p-4 mb-4">
-                          <div className="flex justify-between items-center mb-2">
-                            <div className="text-sm font-semibold text-gray-700">
-                              Template Preview ({editableInstructions.length.toLocaleString()} characters)
-                            </div>
-                            <button
-                              onClick={() => setShowInstructionsModal(true)}
-                              disabled={!useTemplateInstructions}
-                              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                            >
-                              <Settings className="w-4 h-4" />
-                              View & Edit
-                            </button>
-                          </div>
-                          <div className="text-xs text-gray-600 font-mono whitespace-pre-wrap max-h-32 overflow-y-auto bg-gray-50 p-3 rounded-lg">
-                            {editableInstructions.substring(0, 300)}...
-                          </div>
+                    <div className={`p-4 transition-all ${useTemplateInstructions ? 'opacity-100' : 'opacity-50'}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-xs font-semibold text-gray-700">
+                          Template ({editableInstructions.length.toLocaleString()} chars)
                         </div>
-
-                        <div className="grid grid-cols-3 gap-3 text-center text-xs">
-                          <div className="p-3 bg-white rounded-lg">
-                            <div className="font-bold text-purple-600">{products.length}</div>
-                            <div className="text-gray-600">Products</div>
-                          </div>
-                          <div className="p-3 bg-white rounded-lg">
-                            <div className="font-bold text-purple-600">{autoSettings.microCTAs.length}</div>
-                            <div className="text-gray-600">Micro CTAs</div>
-                          </div>
-                          <div className="p-3 bg-white rounded-lg">
-                            <div className="font-bold text-purple-600">Taglish</div>
-                            <div className="text-gray-600">Filipino Ready</div>
-                          </div>
-                        </div>
+                        <button
+                          onClick={() => setShowInstructionsModal(true)}
+                          disabled={!useTemplateInstructions}
+                          className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                        >
+                          <Settings className="w-3 h-3" />
+                          View & Edit
+                        </button>
                       </div>
+                      <div className="text-xs text-gray-600 font-mono whitespace-pre-wrap max-h-24 overflow-y-auto bg-gray-50 p-2 rounded border border-gray-200">
+                        {editableInstructions.substring(0, 200)}...
+                      </div>
+                    </div>
 
-                      {!useTemplateInstructions && (
-                        <div className="mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                    {!useTemplateInstructions && (
+                      <div className="px-4 pb-4">
+                        <div className="p-2 bg-yellow-50 rounded border border-yellow-200">
                           <p className="text-xs text-yellow-800">
-                            ⚠️ Template disabled. AI will use basic instructions from your form data.
+                            ⚠️ Template disabled. AI will use basic instructions.
                           </p>
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <div className="p-6 bg-yellow-50 rounded-2xl border-2 border-yellow-200">
-                    <div className="flex items-start gap-3 mb-3">
-                      <div className="text-2xl">⚠️</div>
-                      <div>
-                        <p className="text-sm font-semibold text-yellow-900 mb-1">
-                          No Template Found
-                        </p>
+                  <div className="p-4 bg-yellow-50 rounded-xl border border-yellow-200">
+                    <div className="flex items-start gap-2">
+                      <span className="text-lg">⚠️</span>
+                      <div className="flex-1">
+                        <p className="text-xs font-semibold text-yellow-900 mb-0.5">No Template Found</p>
                         <p className="text-xs text-yellow-800">
-                          Template loading failed or doesn't exist for "{companyMatch?.name || companyName}".
-                          Your AI will use basic instructions.
+                          Template loading failed. Your AI will use basic instructions.
                         </p>
                       </div>
-                    </div>
-                    <div className="bg-white rounded-lg p-3 text-xs text-gray-600">
-                      Debug Info:
-                      <div>• Company: {companyName}</div>
-                      <div>• Match: {matchedTemplate ? matchedTemplate.name : 'None'}</div>
-                      <div>• Template loaded: {aiInstructions.length > 0 ? 'Yes ✅' : 'No ❌'}</div>
-                      <div>• Instructions length: {aiInstructions.length.toLocaleString()} chars</div>
                     </div>
                   </div>
                 )}
@@ -790,7 +681,7 @@ ${autoSettings.microCTAs.join('\n')}`;
         </div>
 
         {/* Logout Option - Below Action Buttons */}
-        {currentStep === 5 && (
+        {currentStep === 3 && (
           <div className="text-center" style={{ marginTop: '30px' }}>
             <button
               onClick={async () => {

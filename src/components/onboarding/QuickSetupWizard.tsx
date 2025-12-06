@@ -7,7 +7,7 @@
  * - Channel preferences
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Building2,
   ShoppingBag,
@@ -26,6 +26,7 @@ import {
   CheckCircle,
 } from 'lucide-react';
 import { fetchAdminSuggestions } from '../../services/onboarding/dataFeederEngine';
+import { supabase } from '../../lib/supabase';
 
 interface QuickSetupWizardProps {
   onComplete: (data: QuickSetupData) => void;
@@ -69,6 +70,40 @@ export default function QuickSetupWizard({ onComplete, userId }: QuickSetupWizar
   const [selectedCompany, setSelectedCompany] = useState<any | null>(null);
   const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
   const [searching, setSearching] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+
+  // Load company name from user's profile (from signup) and pre-fill
+  useEffect(() => {
+    async function loadProfileCompany() {
+      try {
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('company')
+          .eq('id', userId)
+          .maybeSingle();
+
+        if (!error && profile?.company) {
+          // Pre-fill company input from signup
+          setCompanyInput(profile.company);
+          console.log('[QuickSetupWizard] Pre-filled company from profile:', profile.company);
+        }
+      } catch (err) {
+        console.error('[QuickSetupWizard] Error loading profile company:', err);
+      } finally {
+        setLoadingProfile(false);
+      }
+    }
+
+    loadProfileCompany();
+  }, [userId]);
+
+  // Auto-search when industry is selected and company is pre-filled
+  useEffect(() => {
+    if (industry && companyInput && companyInput.length > 2 && !searching && step === 2) {
+      handleCompanySearch(companyInput);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [industry, step]);
 
   const handleIndustrySelect = (value: string) => {
     setIndustry(value);
@@ -283,7 +318,9 @@ export default function QuickSetupWizard({ onComplete, userId }: QuickSetupWizar
             <h2 className="text-2xl font-bold text-gray-900 mb-2">
               What company or product do you represent?
             </h2>
-            <p className="text-gray-600 mb-6">Type the name and we'll find it for you</p>
+            <p className="text-gray-600 mb-6">
+              {companyInput ? "We've pre-filled this from your signup. You can edit it if needed." : "Type the name and we'll find it for you"}
+            </p>
 
             <div className="relative mb-6">
               <input

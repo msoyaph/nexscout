@@ -8,6 +8,9 @@ interface TermsOfServicePageProps {
 export default function TermsOfServicePage({ onNavigateBack }: TermsOfServicePageProps) {
   const { user } = useAuth();
   const isSuperAdmin = user?.email === 'geoffmax22@gmail.com';
+  
+  // Handle case when useAuth might not be available (public route)
+  const safeUser = user || null;
   return (
     <div className="bg-gray-50 min-h-screen text-gray-900 pb-28">
       <header className="px-6 pt-8 pb-6 bg-white shadow-sm">

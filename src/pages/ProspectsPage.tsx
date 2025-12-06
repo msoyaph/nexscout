@@ -369,28 +369,28 @@ export default function ProspectsPage({
         <div className="h-20"></div>
       </div>
 
-      {/* Bottom Navigation - Facebook Style */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50">
-        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-around">
+      {/* Bottom Navigation */}
+      <nav className="fixed bottom-0 left-0 right-0 w-full bg-white/95 backdrop-blur-xl border-t border-[#E5E7EB] z-50 shadow-[0px_-8px_24px_rgba(0,0,0,0.08)]">
+        <div className="flex items-center justify-between px-6 h-[72px]">
           <button
             onClick={() => onNavigate('home')}
-            className="flex flex-col items-center gap-1 text-gray-500 hover:text-gray-900 transition-colors"
+            className="flex flex-col items-center gap-1 text-[#6B7280]"
           >
-            <Home className="w-6 h-6" />
+            <Home className="size-6" />
             <span className="text-[10px] font-medium">Home</span>
           </button>
           <button className="flex flex-col items-center gap-1 text-[#1877F2] relative">
             <div className="relative">
-              <Users className="w-6 h-6" />
+              <Users className="size-6" />
               <NotificationBadge count={notificationCounts.newProspects} />
             </div>
             <span className="text-[10px] font-medium">Prospects</span>
           </button>
           <button
             onClick={() => onNavigate('chatbot-sessions')}
-            className="relative -top-6 bg-[#1877F2] text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center border-4 border-white transition-transform active:scale-95"
+            className="relative -top-6 bg-[#1877F2] text-white size-14 rounded-full shadow-[0px_8px_24px_rgba(24,119,242,0.4)] flex items-center justify-center border-4 border-white transition-transform active:scale-95"
           >
-            <MessageSquare className="w-7 h-7" />
+            <MessageSquare className="size-7" />
             {notificationCounts.newChats > 0 && (
               <div className="absolute -top-1 -right-1 min-w-[20px] h-[20px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1.5 border-2 border-white shadow-sm">
                 {notificationCounts.newChats > 99 ? '99+' : notificationCounts.newChats}
@@ -399,19 +399,19 @@ export default function ProspectsPage({
           </button>
           <button
             onClick={() => onNavigate('pipeline')}
-            className="flex flex-col items-center gap-1 text-gray-500 hover:text-gray-900 transition-colors relative"
+            className="flex flex-col items-center gap-1 text-[#6B7280] relative"
           >
             <div className="relative">
-              <TrendingUp className="w-6 h-6" />
+              <TrendingUp className="size-6" />
               <NotificationBadge count={notificationCounts.pipelineUpdates} />
             </div>
             <span className="text-[10px] font-medium">Pipeline</span>
           </button>
           <button
             onClick={() => setMenuOpen(true)}
-            className="flex flex-col items-center gap-1 text-gray-500 hover:text-gray-900 transition-colors"
+            className="flex flex-col items-center gap-1 text-[#6B7280]"
           >
-            <MoreHorizontal className="w-6 h-6" />
+            <MoreHorizontal className="size-6" />
             <span className="text-[10px] font-medium">More</span>
           </button>
         </div>

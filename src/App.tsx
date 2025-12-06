@@ -5,6 +5,7 @@ import { NudgeProvider } from './contexts/NudgeContext';
 import { NudgeRenderer } from './components/upgrade';
 import { FloatingNudgeBubble, NudgeToast } from './components/onboarding/OnboardingNudges';
 import PersistentChecklistWidget from './components/onboarding/PersistentChecklistWidget';
+import { WelcomeBonusModal, useWelcomeModal } from './components/onboarding/WelcomeBonusModal';
 import SplashScreen from './components/SplashScreen';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
@@ -47,6 +48,9 @@ import AIChatbotControlPanel from './pages/AIChatbotControlPanel';
 import PublicChatPage from './pages/PublicChatPage';
 import PublicBookingPage from './pages/PublicBookingPage';
 import ChatbotSettingsPage from './pages/ChatbotSettingsPage';
+import TermsOfServicePage from './pages/TermsOfServicePage';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import DataDeletionStatusPage from './pages/DataDeletionStatusPage';
 import ChatbotSessionsPage from './pages/ChatbotSessionsPage';
 import ChatbotSessionViewerPage from './pages/ChatbotSessionViewerPage';
 import CalendarPage from './pages/CalendarPage';
@@ -74,7 +78,7 @@ import LeadsDashboardPage from './pages/LeadsDashboardPage';
 import AutomationToastContainer from './components/automation/AutomationToastContainer';
 
 type AuthView = 'login' | 'onboarding' | 'signup';
-type Page = 'home' | 'discover' | 'pitchdeck' | 'messagesequencer' | 'realtimescan' | 'deepscan' | 'support' | 'scan-entry' | 'scan-upload' | 'scan-processing' | 'scan-results' | 'prospect-detail' | 'deep-scan' | 'deep-scan-v3' | 'pricing' | 'library' | 'notifications' | 'notification-settings' | 'personal-about' | 'about-my-company' | 'scan-prospects-v25' | 'scan-library' | 'scan-results-viewer' | 'extension-setup' | 'admin-scan-diagnostics' | 'csv-check' | 'company-overview' | 'company-performance' | 'energy-refill' | 'ai-chatbot' | 'ai-chatbot-settings' | 'chatbot-settings' | 'chatbot-sessions' | 'chatbot-session-viewer' | 'leads-dashboard' | 'public-chat' | 'calendar' | 'todos' | 'reminders' | 'notification-preferences' | 'team-billing' | 'team-seats' | 'nudge-demo' | 'gov-overview' | 'gov-org-chart' | 'gov-engines' | 'gov-health' | 'gov-audit' | 'gov-departments' | 'gov-economy' | 'add-product' | 'products-list' | 'product-detail' | 'product-analytics' | 'mentor-chat' | 'ai-messages' | 'messaging-hub' | 'admin-control-panel' | 'ai-admin-editor';
+type Page = 'home' | 'discover' | 'pitchdeck' | 'messagesequencer' | 'realtimescan' | 'deepscan' | 'support' | 'scan-entry' | 'scan-upload' | 'scan-processing' | 'scan-results' | 'prospect-detail' | 'deep-scan' | 'deep-scan-v3' | 'pricing' | 'library' | 'notifications' | 'notification-settings' | 'personal-about' | 'about-my-company' | 'scan-prospects-v25' | 'scan-library' | 'scan-results-viewer' | 'extension-setup' | 'admin-scan-diagnostics' | 'csv-check' | 'company-overview' | 'company-performance' | 'energy-refill' | 'ai-chatbot' | 'ai-chatbot-settings' | 'chatbot-settings' | 'chatbot-sessions' | 'chatbot-session-viewer' | 'leads-dashboard' | 'public-chat' | 'calendar' | 'todos' | 'reminders' | 'notification-preferences' | 'team-billing' | 'team-seats' | 'nudge-demo' | 'gov-overview' | 'gov-org-chart' | 'gov-engines' | 'gov-health' | 'gov-audit' | 'gov-departments' | 'gov-economy' | 'add-product' | 'products-list' | 'product-detail' | 'product-analytics' | 'mentor-chat' | 'ai-messages' | 'messaging-hub' | 'admin-control-panel' | 'ai-admin-editor' | 'terms-of-service' | 'privacy-policy';
 
 interface OnboardingData {
   role: string;
@@ -132,6 +136,44 @@ function App() {
     return null;
   }
 
+  // Public Terms of Service Route: /terms
+  if (path === '/terms' || path === '/terms/') {
+    console.log('[App] Public Terms of Service route detected!');
+    return (
+      <AuthProvider>
+        <TermsOfServicePage
+          onNavigateBack={() => {
+            window.location.href = '/';
+          }}
+        />
+      </AuthProvider>
+    );
+  }
+
+  // Public Privacy Policy Route: /privacy
+  if (path === '/privacy' || path === '/privacy/') {
+    console.log('[App] Public Privacy Policy route detected!');
+    return (
+      <AuthProvider>
+        <PrivacyPolicyPage
+          onNavigateBack={() => {
+            window.location.href = '/';
+          }}
+        />
+      </AuthProvider>
+    );
+  }
+
+  // Public Data Deletion Status Route: /data-deletion-status
+  if (path.startsWith('/data-deletion-status')) {
+    console.log('[App] Public Data Deletion Status route detected!');
+    return (
+      <AuthProvider>
+        <DataDeletionStatusPage />
+      </AuthProvider>
+    );
+  }
+
   console.log('[App] Authenticated route - loading AuthProvider');
 
   // For all other routes, use the normal authenticated app
@@ -148,7 +190,7 @@ function App() {
 
 function AppContent() {
   const [showSplash, setShowSplash] = useState(true);
-  const [authView, setAuthView] = useState<AuthView>('login');
+  const [authView, setAuthView] = useState<AuthView>('signup'); // Default to signup instead of login
   const [onboardingData, setOnboardingData] = useState<OnboardingData | null>(null);
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const [pageOptions, setPageOptions] = useState<any>(null);
@@ -364,6 +406,10 @@ function AppContent() {
         return <AIMessagesPage onNavigate={handleNavigate} />;
       case 'messaging-hub':
         return <MessagingHubPage onNavigate={handleNavigate} />;
+      case 'terms-of-service':
+        return <TermsOfServicePage onNavigateBack={() => handleNavigate('home')} />;
+      case 'privacy-policy':
+        return <PrivacyPolicyPage onNavigateBack={() => handleNavigate('home')} />;
       default:
         return <HomePage onNavigate={handleNavigate} />;
     }
@@ -375,6 +421,9 @@ function AppContent() {
       <NudgeRenderer />
       <AutomationToastContainer />
       
+      {/* Welcome Bonus Modal */}
+      {user && profile && <WelcomeBonusModalWrapper />}
+      
       {/* Onboarding Nudges & Checklist (only show if logged in and not on onboarding pages) */}
       {user && profile && (
         <>
@@ -385,6 +434,24 @@ function AppContent() {
       )}
     </>
   );
+}
+
+// Separate component to use the hook
+function WelcomeBonusModalWrapper() {
+  const shouldShow = useWelcomeModal();
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    if (shouldShow) {
+      // Small delay to ensure smooth page load
+      const timer = setTimeout(() => setIsOpen(true), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [shouldShow]);
+
+  if (!isOpen) return null;
+
+  return <WelcomeBonusModal onClose={() => setIsOpen(false)} />;
 }
 
 export default App;

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { X, Sparkles } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface UpgradeBannerProps {
   message: string;
@@ -8,6 +9,7 @@ interface UpgradeBannerProps {
   onDismiss?: () => void;
   autoDismiss?: boolean;
   autoDismissDelay?: number;
+  coins?: number; // Optional: if provided, use this instead of fetching
 }
 
 // Smart dismissal tracking - prevents spamming
@@ -70,23 +72,30 @@ export function UpgradeBanner({
   onDismiss,
   autoDismiss = true,
   autoDismissDelay = 8000,
+  coins: coinsProp,
 }: UpgradeBannerProps) {
+  const { profile } = useAuth();
   const [visible, setVisible] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
   const hasCheckedRef = useRef(false);
 
-  // Smart appearance check - only show if not recently dismissed
+  // Get current coin balance
+  const currentCoins = coinsProp ?? profile?.coin_balance ?? 0;
+  const shouldShowBasedOnCoins = currentCoins <= 5;
+
+  // Smart appearance check - only show if coins <= 5 AND not recently dismissed
   useEffect(() => {
     if (hasCheckedRef.current) return;
     hasCheckedRef.current = true;
 
-    if (canShowBanner()) {
+    // Only show if coins are 5 or below
+    if (shouldShowBasedOnCoins && canShowBanner()) {
       setVisible(true);
       // Trigger slide-in animation
       setTimeout(() => setIsAnimating(true), 10);
     }
-  }, []);
+  }, [shouldShowBasedOnCoins]);
 
   useEffect(() => {
     if (autoDismiss && visible) {
