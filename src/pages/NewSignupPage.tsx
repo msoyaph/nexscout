@@ -8,6 +8,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { UserPlus, Eye, EyeOff, Sparkles, Loader2, CheckCircle, Zap, Bot, MessageSquare, ChevronLeft, ChevronRight, MessageCircle, X, Send, Minimize2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { getSupabaseFunctionUrl } from '../lib/supabaseUrl';
 
 interface NewSignupPageProps {
   onNavigateToLogin: () => void;
@@ -37,56 +38,433 @@ export default function NewSignupPage({ onNavigateToLogin, onSignupSuccess }: Ne
   // Floating chatbox state
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMinimized, setChatMinimized] = useState(false);
-  const [chatMessages, setChatMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([
-    {
-      role: 'assistant',
-      content: 'Hi! 👋 I\'m your NexScout AI assistant. Ask me anything about our features, pricing, or how we can help grow your business!'
-    }
-  ]);
+  const [chatMessages, setChatMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
+  const [chatSessionId, setChatSessionId] = useState<string | null>(null);
+  const [signupChatUserId, setSignupChatUserId] = useState<string | null>(null);
+  const [chatbotSettings, setChatbotSettings] = useState<any>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatInitializedRef = useRef(false);
+  
+  // Get signup chat user ID on mount (meyouvideos@gmail.com)
+  // Use a fixed chatbot_id for signup page chat
+  // Wrapped in try-catch to prevent component crash
+  useEffect(() => {
+    let isMounted = true;
+    
+    const getSignupChatUserId = async () => {
+      try {
+        console.log('[SignupChat] Looking up signup chat user ID (meyouvideos@gmail.com)...');
+        
+        // Strategy 1: Use RPC function to get signup chat user ID (bypasses RLS)
+        try {
+          const { data: rpcUserId, error: rpcError } = await supabase
+            .rpc('get_signup_chat_user_id');
+          
+          if (rpcUserId && !rpcError && isMounted) {
+            setSignupChatUserId(rpcUserId);
+            console.log('[SignupChat] ✅ Found signup chat user via RPC function:', rpcUserId);
+            return;
+          } else if (rpcError) {
+            // Check if error is because user doesn't exist
+            if (rpcError.message?.includes('not found') || rpcError.message?.includes('Signup chat user not found')) {
+              console.warn('[SignupChat] ⚠️ User meyouvideos@gmail.com does not exist in database');
+              console.warn('[SignupChat] 📝 Please create the user account first, or use a different email');
+              console.warn('[SignupChat] Chat will be disabled until user account is created');
+              // Don't return - try other methods
+            } else {
+              console.warn('[SignupChat] RPC function error:', rpcError.message);
+            }
+          }
+        } catch (rpcError: any) {
+          console.warn('[SignupChat] RPC function error, trying fallback methods...', rpcError?.message || rpcError);
+        }
+        
+        // Strategy 2: Try to get via a known chatbot_id
+        // First try 'signup-page-chat' which should be set up for the signup chat account
+        const knownChatbotId = 'signup-page-chat';
+        
+        // Try RPC function first (same as PublicChatPage)
+        const { data: rpcUserId2, error: rpcError2 } = await supabase
+          .rpc('get_user_from_chatbot_id', { p_chatbot_id: knownChatbotId });
+        
+        if (rpcUserId2 && !rpcError2 && isMounted) {
+          setSignupChatUserId(rpcUserId2);
+          console.log('[SignupChat] ✅ Found signup chat user via RPC:', rpcUserId2);
+          return;
+        }
+        
+        // Strategy 3: Query chatbot_links table directly (publicly accessible)
+        const { data: chatbotLink, error: linkError } = await supabase
+          .from('chatbot_links')
+          .select('user_id')
+          .eq('chatbot_id', knownChatbotId)
+          .eq('is_active', true)
+          .maybeSingle();
+        
+        if (chatbotLink && !linkError && isMounted) {
+          setSignupChatUserId(chatbotLink.user_id);
+          console.log('[SignupChat] ✅ Found signup chat user via chatbot_links:', chatbotLink.user_id);
+          return;
+        }
+        
+        // Strategy 4: Try common chatbot_id patterns
+        const possibleIds = ['meyouvideos', 'signup-chat', 'nexscout-signup'];
+        
+        for (const testId of possibleIds) {
+          if (!isMounted) break;
+          
+          const { data: testLink } = await supabase
+            .from('chatbot_links')
+            .select('user_id')
+            .or(`chatbot_id.eq.${testId},custom_slug.eq.${testId}`)
+            .eq('is_active', true)
+            .maybeSingle();
+          
+          if (testLink && isMounted) {
+            setSignupChatUserId(testLink.user_id);
+            console.log('[SignupChat] ✅ Found signup chat user via chatbot_id pattern:', testId, testLink.user_id);
+            return;
+          }
+        }
+        
+        // Strategy 5: Final fallback - show helpful error (non-blocking)
+        if (isMounted) {
+          console.warn('[SignupChat] ⚠️ Could not find signup chat user ID via any method');
+          console.warn('[SignupChat] 📝 SETUP REQUIRED:');
+          console.warn('[SignupChat] 1. Create user account with email: meyouvideos@gmail.com');
+          console.warn('[SignupChat] 2. Or update RPC function to use a different email');
+          console.warn('[SignupChat] 3. See file: FIX_SIGNUP_CHAT_NOW.md for detailed instructions');
+          // Chat will be disabled until user account is created
+          // Component will still render normally
+        }
+        
+      } catch (error: any) {
+        // Prevent error from crashing the component
+        console.error('[SignupChat] Error getting signup chat user:', error);
+        console.error('[SignupChat] Error details:', {
+          message: error?.message || 'Unknown error',
+          stack: error?.stack
+        });
+        // Component will still render - chat just won't work until RPC function is created
+      }
+    };
+    
+    // Call async function
+    getSignupChatUserId().catch((error) => {
+      // Extra safety catch
+      console.error('[SignupChat] Unhandled error in getSignupChatUserId:', error);
+    });
+    
+    // Cleanup
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+  
+  // Initialize chat session when chat opens
+  useEffect(() => {
+    if (chatOpen && signupChatUserId && !chatInitializedRef.current) {
+      console.log('[SignupChat] Chat opened, initializing session...');
+      initializeChatSession();
+    } else if (chatOpen && !signupChatUserId) {
+      console.warn('[SignupChat] Chat opened but signup chat user ID not loaded yet');
+      // Show helpful message in chat
+      setChatMessages([{
+        role: 'assistant',
+        content: 'Hi! 👋 Chat service is being configured. Please try again in a moment, or feel free to sign up above! 😊'
+      }]);
+    }
+  }, [chatOpen, signupChatUserId]);
   
   // Scroll to bottom of chat when new message arrives
   useEffect(() => {
     if (chatOpen && !chatMinimized) {
-      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      setTimeout(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
     }
   }, [chatMessages, chatOpen, chatMinimized]);
   
+  // Initialize chat session and load chatbot settings
+  const initializeChatSession = async () => {
+    if (!signupChatUserId || chatInitializedRef.current) return;
+    
+    try {
+      chatInitializedRef.current = true;
+      console.log('[SignupChat] Initializing chat session for signup chat user:', signupChatUserId);
+      
+      // Load chatbot settings
+      const { data: settings, error: settingsError } = await supabase
+        .from('chatbot_settings')
+        .select('*')
+        .eq('user_id', signupChatUserId)
+        .maybeSingle();
+      
+      if (settingsError) {
+        console.error('[SignupChat] Error loading settings:', settingsError);
+      }
+      
+      setChatbotSettings(settings || {
+        display_name: 'NexScout AI Assistant',
+        greeting_message: 'Hi! 👋 I\'m your NexScout AI assistant. Ask me anything about our features, pricing, or how we can help grow your business!',
+        use_custom_instructions: true,
+        instructions_override_intelligence: true,
+        custom_system_instructions: '' // Will be loaded from NEXSCOUT_AI_SYSTEM_INSTRUCTIONS.md
+      });
+      
+      // Generate unique visitor session ID
+      const visitorSessionId = localStorage.getItem('signup_chat_visitor_id') ||
+        `signup_visitor_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      localStorage.setItem('signup_chat_visitor_id', visitorSessionId);
+      
+      // Check for existing session
+      const { data: existingSession } = await supabase
+        .from('public_chat_sessions')
+        .select('*')
+        .eq('user_id', signupChatUserId)
+        .eq('visitor_session_id', visitorSessionId)
+        .eq('channel', 'web')
+        .in('status', ['active', 'human_takeover'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      let sessionId: string;
+      
+      if (existingSession) {
+        sessionId = existingSession.id;
+        console.log('[SignupChat] Using existing session:', sessionId);
+        
+        // Load existing messages
+        const { data: existingMessages } = await supabase
+          .from('public_chat_messages')
+          .select('*')
+          .eq('session_id', sessionId)
+          .order('created_at', { ascending: true });
+        
+        if (existingMessages) {
+          const formattedMessages = existingMessages.map(msg => ({
+            role: msg.sender === 'visitor' ? 'user' as const : 'assistant' as const,
+            content: msg.message
+          }));
+          setChatMessages(formattedMessages);
+        }
+      } else {
+        // Create new session
+        const sessionSlug = `signup_chat_${visitorSessionId}_${Date.now()}`;
+        const { data: newSession, error: sessionError } = await supabase
+          .from('public_chat_sessions')
+          .insert({
+            user_id: signupChatUserId,
+            chatbot_id: 'signup-page-chat',
+            visitor_session_id: visitorSessionId,
+            session_slug: sessionSlug,
+            channel: 'web',
+            status: 'active',
+            buying_intent_score: 0,
+            qualification_score: 0,
+            message_count: 0
+          })
+          .select()
+          .single();
+        
+        if (sessionError) {
+          console.error('[SignupChat] Error creating session:', sessionError);
+          return;
+        }
+        
+        sessionId = newSession.id;
+        console.log('[SignupChat] Created new session:', sessionId);
+        
+        // Add greeting message
+        const greeting = settings?.greeting_message || 'Hi! 👋 I\'m your NexScout AI assistant. Ask me anything about our features, pricing, or how we can help grow your business!';
+        setChatMessages([{ role: 'assistant', content: greeting }]);
+        
+        // Save greeting to database
+        await supabase
+          .from('public_chat_messages')
+          .insert({
+            session_id: sessionId,
+            sender: 'ai',
+            message: greeting,
+            created_at: new Date().toISOString()
+          });
+      }
+      
+      setChatSessionId(sessionId);
+      console.log('[SignupChat] ✅ Chat session initialized successfully:', {
+        sessionId,
+        userId: signupChatUserId,
+        hasSettings: !!settings,
+        useCustomInstructions: settings?.use_custom_instructions,
+        hasCustomInstructions: !!settings?.custom_system_instructions
+      });
+      
+      // Note: AI System Instructions are loaded by the Edge Function from chatbot_settings
+      // The Edge Function will use custom_system_instructions if use_custom_instructions is true
+      if (settings?.use_custom_instructions && settings?.custom_system_instructions) {
+        console.log('[SignupChat] Custom AI System Instructions will be used by Edge Function');
+      } else {
+        console.warn('[SignupChat] ⚠️ No custom AI System Instructions found. Using default.');
+      }
+      
+    } catch (error: any) {
+      console.error('[SignupChat] ❌ Error initializing chat:', error);
+        console.error('[SignupChat] Error details:', {
+          message: error.message,
+          stack: error.stack
+        });
+      chatInitializedRef.current = false;
+      
+      // Show error to user
+      setChatMessages([{
+        role: 'assistant',
+        content: 'Sorry, I couldn\'t initialize the chat. Please try closing and reopening it. 😊'
+      }]);
+    }
+  };
+  
   // Handle chat message submission
   const handleChatSend = async () => {
-    if (!chatInput.trim() || chatLoading) return;
+    // Validation checks
+    if (!chatInput.trim()) {
+      console.warn('[SignupChat] Empty message, ignoring');
+      return;
+    }
+    
+    if (chatLoading) {
+      console.warn('[SignupChat] Already sending message, ignoring');
+      return;
+    }
+    
+    if (!chatSessionId) {
+      console.error('[SignupChat] No session ID, cannot send message');
+      alert('Chat session not initialized. Please close and reopen the chat.');
+      return;
+    }
+    
+    if (!signupChatUserId) {
+      console.error('[SignupChat] No signup chat user ID, cannot send message');
+      alert('Chat configuration error. Please refresh the page.');
+      return;
+    }
     
     const userMessage = chatInput.trim();
     setChatInput('');
+    
+    // Add user message immediately (optimistic UI)
     setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
     setChatLoading(true);
     
-    // Simulate AI response (you can replace this with actual AI API call)
-    setTimeout(() => {
-      let response = '';
+    try {
+      console.log('[SignupChat] ===== SENDING MESSAGE =====');
+      console.log('[SignupChat] Session ID:', chatSessionId);
+      console.log('[SignupChat] User ID:', superAdminUserId);
+      console.log('[SignupChat] Message:', userMessage);
       
-      // Simple keyword-based responses for demo
-      const lowerMessage = userMessage.toLowerCase();
+      // First, save user message to database
+      const { error: messageError } = await supabase
+        .from('public_chat_messages')
+        .insert({
+          session_id: chatSessionId,
+          sender: 'visitor',
+          message: userMessage,
+          created_at: new Date().toISOString()
+        });
       
-      if (lowerMessage.includes('price') || lowerMessage.includes('cost') || lowerMessage.includes('pricing')) {
-        response = 'We offer a Free tier to get started, and Pro plans starting at ₱1,299/month. The Free tier includes 30 AI chatbot messages, 50 scans, and basic features. Pro includes unlimited scans, 300 chatbot messages, and advanced AI automation. Would you like to know more about specific features?';
-      } else if (lowerMessage.includes('feature') || lowerMessage.includes('what can') || lowerMessage.includes('how does')) {
-        response = 'NexScout offers three main features:\n\n1. **24/7 AI Chatbot Automation** - Automatically handle customer inquiries, qualify leads, and book appointments even while you sleep.\n\n2. **AI-Powered Prospecting** - Find high-quality leads using AI that understands Filipino market needs and pain points.\n\n3. **Unified Chat Inbox** - Manage all conversations from Facebook, WhatsApp, SMS in one place.\n\nWhich feature interests you most?';
-      } else if (lowerMessage.includes('signup') || lowerMessage.includes('sign up') || lowerMessage.includes('register')) {
-        response = 'Great! Just fill out the form above with your name, company, email, and password. It takes less than 2 minutes to get started. Once you sign up, you\'ll get:\n\n✨ FREE 30 coins\n⚡ FREE 5 energy\n💬 FREE 30 AI chatbot messages\n\nPlus daily bonuses! Ready to start?';
-      } else if (lowerMessage.includes('free') || lowerMessage.includes('trial')) {
-        response = 'Yes! We have a Free tier that includes:\n\n• 30 AI chatbot messages per month\n• 50 prospect scans per month\n• Basic AI prospecting\n• Unified inbox\n• Email support\n\nNo credit card required! You can upgrade anytime to unlock more features.';
-      } else if (lowerMessage.includes('help') || lowerMessage.includes('support')) {
-        response = 'I\'m here to help! You can ask me about:\n\n• Features and capabilities\n• Pricing and plans\n• How to get started\n• Use cases and examples\n• Technical questions\n\nOr fill out the signup form above and our team will reach out. What would you like to know?';
-      } else {
-        response = 'That\'s a great question! Let me help you:\n\nNexScout is an AI-powered sales intelligence platform designed for Filipino entrepreneurs. We help automate your sales process, find qualified leads, and manage all your customer conversations in one place.\n\nWould you like to know more about:\n• Our features\n• Pricing\n• How to get started\n• Real customer success stories\n\nJust ask!';
+      if (messageError) {
+        console.error('[SignupChat] Error saving user message:', messageError);
+        throw new Error('Failed to save message: ' + messageError.message);
       }
       
-      setChatMessages(prev => [...prev, { role: 'assistant', content: response }]);
+      console.log('[SignupChat] User message saved to database');
+      
+      // Use Edge Function approach (same as PublicChatPage)
+      const functionUrl = getSupabaseFunctionUrl('functions/v1/public-chatbot-chat');
+      console.log('[SignupChat] Calling Edge Function:', functionUrl);
+      
+      const response = await fetch(
+        functionUrl,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({
+            sessionId: chatSessionId,
+            message: userMessage,
+            userId: signupChatUserId,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('[SignupChat] Edge Function error:', response.status, errorData);
+        throw new Error(`Server error (${response.status}): ${errorData || response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('[SignupChat] AI response received:', result);
+      
+      // Reload messages from database (includes AI response)
+      const { data: messages, error: loadError } = await supabase
+        .from('public_chat_messages')
+        .select('*')
+        .eq('session_id', chatSessionId)
+        .order('created_at', { ascending: true });
+      
+      if (loadError) {
+        console.error('[SignupChat] Error loading messages:', loadError);
+        throw new Error('Failed to load messages: ' + loadError.message);
+      }
+      
+      if (messages && messages.length > 0) {
+        const formattedMessages = messages.map(msg => ({
+          role: msg.sender === 'visitor' ? 'user' as const : 'assistant' as const,
+          content: msg.message
+        }));
+        setChatMessages(formattedMessages);
+        console.log('[SignupChat] Messages reloaded:', formattedMessages.length);
+      } else {
+        console.warn('[SignupChat] No messages found after sending');
+      }
+      
+      console.log('[SignupChat] ===== MESSAGE SENT COMPLETE =====');
+      
+    } catch (error: any) {
+      console.error('[SignupChat] Error processing message:', error);
+        console.error('[SignupChat] Error details:', {
+          message: error.message,
+          stack: error.stack,
+          sessionId: chatSessionId,
+          userId: signupChatUserId
+        });
+      
+      // Remove the optimistic user message on error
+      setChatMessages(prev => {
+        const filtered = prev.filter((msg, idx) => {
+          // Keep all messages except the last user message if it matches
+          if (idx === prev.length - 1 && msg.role === 'user' && msg.content === userMessage) {
+            return false;
+          }
+          return true;
+        });
+        return filtered;
+      });
+      
+      // Show error message
+      setChatMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `Sorry, I encountered an error: ${error.message || 'Unknown error'}. Please try again! 😊`
+      }]);
+    } finally {
       setChatLoading(false);
-    }, 1000);
+    }
   };
   
   const handleChatKeyPress = (e: React.KeyboardEvent) => {
@@ -95,6 +473,13 @@ export default function NewSignupPage({ onNavigateToLogin, onSignupSuccess }: Ne
       handleChatSend();
     }
   };
+  
+  // Reset chat when closed
+  useEffect(() => {
+    if (!chatOpen) {
+      chatInitializedRef.current = false;
+    }
+  }, [chatOpen]);
   
   const features = [
     {
@@ -190,23 +575,17 @@ export default function NewSignupPage({ onNavigateToLogin, onSignupSuccess }: Ne
       console.log('[NewSignup] Starting signup via admin endpoint for:', email);
 
       // Call admin-signup edge function (bypasses ALL Supabase Auth restrictions!)
-      // Normalize URL to ensure HTTPS and remove trailing slashes
-      let supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-      supabaseUrl = supabaseUrl.trim().replace(/\/+$/, ''); // Remove trailing slashes
-      if (supabaseUrl.startsWith('http://')) {
-        supabaseUrl = supabaseUrl.replace('http://', 'https://'); // Force HTTPS
-      }
-      if (!supabaseUrl.startsWith('https://')) {
-        supabaseUrl = `https://${supabaseUrl}`;
-      }
+      const functionUrl = getSupabaseFunctionUrl('functions/v1/admin-signup');
+      console.log('[NewSignup] Calling edge function:', functionUrl);
       
       const response = await fetch(
-        `${supabaseUrl}/functions/v1/admin-signup`,
+        functionUrl,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
           },
           body: JSON.stringify({
             email,
@@ -217,11 +596,48 @@ export default function NewSignupPage({ onNavigateToLogin, onSignupSuccess }: Ne
         }
       );
 
-      const result = await response.json();
+      console.log('[NewSignup] Response status:', response.status);
+      console.log('[NewSignup] Response ok:', response.ok);
+
+      // Check if response is ok before trying to parse JSON
+      if (!response.ok) {
+        let errorMessage = `Server error: ${response.status} ${response.statusText}`;
+        
+        // Try to get error details from response
+        try {
+          const errorText = await response.text();
+          console.error('[NewSignup] Error response text:', errorText);
+          
+          // Try to parse as JSON
+          try {
+            const errorJson = JSON.parse(errorText);
+            errorMessage = errorJson.error || errorJson.message || errorText || errorMessage;
+            console.error('[NewSignup] Error JSON:', errorJson);
+          } catch {
+            // Not JSON, use text as is
+            errorMessage = errorText || errorMessage;
+          }
+        } catch (parseError) {
+          console.error('[NewSignup] Failed to parse error response:', parseError);
+        }
+        
+        throw new Error(errorMessage);
+      }
+
+      // Parse response JSON
+      let result;
+      try {
+        const responseText = await response.text();
+        console.log('[NewSignup] Response text:', responseText);
+        result = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('[NewSignup] Failed to parse response JSON:', parseError);
+        throw new Error('Invalid response from server. Please try again.');
+      }
 
       if (!result.success) {
-        console.error('[NewSignup] Admin signup error:', result.error);
-        throw new Error(result.error || 'Signup failed');
+        console.error('[NewSignup] Admin signup error:', result.error || result);
+        throw new Error(result.error || result.message || 'Signup failed');
       }
 
       console.log('[NewSignup] ✅ User created via admin endpoint:', result.user_id);
@@ -267,7 +683,7 @@ export default function NewSignupPage({ onNavigateToLogin, onSignupSuccess }: Ne
         {/* Logo */}
         <div className="text-center mb-6">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            NexScout<span className="text-blue-600">.ai</span>
+            NexScout
           </h1>
           <p className="text-gray-600">AI-Powered Sales Intelligence</p>
         </div>
@@ -580,31 +996,33 @@ export default function NewSignupPage({ onNavigateToLogin, onSignupSuccess }: Ne
           </div>
         </div>
 
-        {/* Trust Indicators */}
-        <div className="mt-6 text-center">
-          <p className="text-xs text-gray-500 flex items-center justify-center gap-2">
-            <Sparkles className="w-3 h-3" />
-            <span>Join 1,000+ Filipino entrepreneurs using NexScout AI</span>
-          </p>
-        </div>
       </div>
 
-      {/* Floating Chatbox */}
-      {!chatOpen ? (
-        <button
-          onClick={() => {
-            setChatOpen(true);
-            setChatMinimized(false);
-          }}
-          className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-br from-blue-600 to-purple-600 text-white rounded-full shadow-2xl hover:shadow-blue-500/50 flex items-center justify-center transition-all hover:scale-110 z-50 group"
-          aria-label="Open chat"
-        >
-          <MessageCircle className="w-6 h-6 group-hover:scale-110 transition-transform" />
-          <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white animate-pulse" />
-        </button>
-      ) : (
+      {/* Floating Chatbox - Only show if signup chat user exists */}
+      {signupChatUserId && (
+        <>
+          {!chatOpen ? (
+            <div className="fixed bottom-6 right-6 flex flex-col items-end gap-2 z-50">
+              <p 
+                className="text-sm text-gray-700 font-medium whitespace-nowrap milky-candy"
+                style={{ fontFamily: "'Milky Candy Regular', 'Fredoka', 'Comic Sans MS', cursive" }}
+              >
+                Wanna chat?
+              </p>
+              <button
+                onClick={() => {
+                  setChatOpen(true);
+                  setChatMinimized(false);
+                }}
+                className="w-14 h-14 bg-gradient-to-br from-blue-600 to-purple-600 text-white rounded-full shadow-2xl hover:shadow-blue-500/50 flex items-center justify-center transition-all hover:scale-110 group"
+                aria-label="Open chat"
+              >
+                <MessageCircle className="w-6 h-6 group-hover:scale-110 transition-transform" />
+              </button>
+            </div>
+          ) : (
         <div
-          className={`fixed bottom-6 right-6 w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 z-50 transition-all duration-300 ${
+          className={`fixed bottom-6 right-6 w-[369px] bg-white rounded-2xl shadow-2xl border border-gray-200 z-50 transition-all duration-300 ${
             chatMinimized ? 'h-16' : 'h-[500px]'
           } flex flex-col`}
         >
@@ -681,17 +1099,34 @@ export default function NewSignupPage({ onNavigateToLogin, onSignupSuccess }: Ne
                     type="text"
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
-                    onKeyPress={handleChatKeyPress}
-                    placeholder="Ask about features, pricing, or how to get started..."
-                    className="flex-1 px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none text-sm"
-                    disabled={chatLoading}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        if (chatSessionId && !chatLoading && chatInput.trim()) {
+                          handleChatSend();
+                        }
+                      }
+                    }}
+                    placeholder={!chatSessionId ? "Initializing chat..." : "Ask about features, pricing, or how to get started..."}
+                    className="flex-1 px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    disabled={chatLoading || !chatSessionId}
                   />
                   <button
-                    onClick={handleChatSend}
-                    disabled={!chatInput.trim() || chatLoading}
-                    className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (chatSessionId && !chatLoading && chatInput.trim()) {
+                        handleChatSend();
+                      }
+                    }}
+                    disabled={!chatInput.trim() || chatLoading || !chatSessionId}
+                    className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center min-w-[44px]"
+                    title={!chatSessionId ? 'Chat initializing...' : chatInput.trim() ? 'Send message' : 'Type a message'}
                   >
-                    <Send className="w-4 h-4" />
+                    {chatLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
                 <p className="text-xs text-gray-500 mt-2 text-center">
@@ -701,6 +1136,8 @@ export default function NewSignupPage({ onNavigateToLogin, onSignupSuccess }: Ne
             </>
           )}
         </div>
+          )}
+        </>
       )}
     </div>
   );

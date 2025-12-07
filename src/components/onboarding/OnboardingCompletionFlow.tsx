@@ -208,22 +208,19 @@ ${autoSettings.microCTAs.join('\n')}
   // ========== STEP 1: Facebook Connection ==========
   if (step === 'fb-connect') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 flex items-center justify-center p-6">
-        <div className="max-w-2xl w-full bg-white rounded-3xl shadow-2xl p-8 md:p-12">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 flex items-center justify-center p-2">
+        <div className="max-w-2xl w-full bg-white rounded-3xl shadow-2xl p-3 md:p-5">
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 mb-4">
               <Zap className="w-10 h-10 text-white" />
             </div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">🎉 Get Your First Big Win!</h1>
-            <p className="text-lg text-gray-600">Connect your Facebook Page and start capturing leads in minutes</p>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">🎉 Get Your First Big Win!</h1>
+            <p className="text-sm text-gray-600">Connect your Facebook Page and start capturing leads in minutes</p>
           </div>
 
           {/* FB Connect Card */}
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 mb-6 border-2 border-blue-200">
             <div className="flex items-start gap-4 mb-4">
-              <div className="flex-shrink-0 w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center">
-                <Facebook className="w-6 h-6 text-white" />
-              </div>
               <div className="flex-1">
                 <h3 className="font-bold text-gray-900 mb-1">Connect Facebook Messenger</h3>
                 <p className="text-sm text-gray-700">
@@ -250,7 +247,13 @@ ${autoSettings.microCTAs.join('\n')}
             ) : (
               <button
                 onClick={handleFacebookConnect}
-                className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
+                disabled={userEmail !== 'geoffmax22@gmail.com'}
+                className={`w-full py-4 font-bold rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
+                  userEmail === 'geoffmax22@gmail.com'
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-xl cursor-pointer'
+                    : 'bg-gray-300 text-gray-600 cursor-not-allowed opacity-75'
+                }`}
+                title={userEmail !== 'geoffmax22@gmail.com' ? 'This feature is currently in development' : 'Connect your Facebook page'}
               >
                 <Facebook className="w-5 h-5" />
                 Connect Facebook Page Now

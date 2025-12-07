@@ -215,16 +215,13 @@ export default function QuickSetupWizard({ onComplete, userId }: QuickSetupWizar
         {step === 1 && (
           <div className="bg-white rounded-3xl shadow-2xl p-8 md:p-12 animate-fade-in">
             <div className="text-center mb-8">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 mb-4">
-                <Sparkles className="w-8 h-8 text-white" />
-              </div>
-              <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">
+              <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">
                 Welcome to NexScout!
               </h1>
-              <p className="text-lg text-gray-600">Let's get you set up in under 90 seconds</p>
+              <p className="text-sm text-gray-600">Let's get you set up in under 90 seconds</p>
             </div>
 
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">What industry are you in?</h2>
+            <h2 className="text-lg font-bold text-gray-900 mb-6">What industry are you in?</h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {industries.map((ind) => {
@@ -315,7 +312,7 @@ export default function QuickSetupWizard({ onComplete, userId }: QuickSetupWizar
               ← Back
             </button>
 
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            <h2 className="text-lg font-bold text-gray-900 mb-2">
               What company or product do you represent?
             </h2>
             <p className="text-gray-600 mb-6">

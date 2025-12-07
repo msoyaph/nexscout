@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Send, User, MessageCircle, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { getSupabaseFunctionUrl } from '../lib/supabaseUrl';
 
 interface Message {
   id: string;
@@ -320,7 +321,7 @@ export default function PublicChatPage({ slug, onNavigate }: PublicChatPageProps
           message_count: 0
         })
         .select()
-        .single();
+        .maybeSingle();
 
       if (sessionError) {
         console.error('[PublicChat] Session creation error:', sessionError);
@@ -366,7 +367,7 @@ export default function PublicChatPage({ slug, onNavigate }: PublicChatPageProps
               message_count: 0
             })
             .select()
-            .single();
+            .maybeSingle();
           
           if (retryError) {
             console.error('[PublicChat] Retry session creation also failed:', retryError);
@@ -465,8 +466,30 @@ export default function PublicChatPage({ slug, onNavigate }: PublicChatPageProps
       const startTime = Date.now();
       
       // Call Edge Function to get AI response
+      // Use getSupabaseFunctionUrl to ensure proper URL formatting (HTTPS, no double slashes)
+      let functionUrl = getSupabaseFunctionUrl('functions/v1/public-chatbot-chat');
+      console.log('[PublicChat] Calling edge function:', functionUrl);
+      
+      // Final validation and fix if needed (defensive programming)
+      if (!functionUrl.startsWith('https://')) {
+        console.error('[PublicChat] ❌ ERROR: URL is not HTTPS! Fixing...', functionUrl);
+        // Force HTTPS
+        functionUrl = functionUrl.replace(/^http:\/\//, 'https://');
+        if (!functionUrl.startsWith('https://')) {
+          functionUrl = `https://${functionUrl}`;
+        }
+        console.log('[PublicChat] Fixed URL:', functionUrl);
+      }
+      
+      // Fix any double slashes (except after https://)
+      if (functionUrl.match(/[^:]\/\//)) {
+        console.warn('[PublicChat] ⚠️ URL contains double slashes! Fixing...', functionUrl);
+        functionUrl = functionUrl.replace(/([^:]\/)\/+/g, '$1');
+        console.log('[PublicChat] Fixed URL:', functionUrl);
+      }
+      
       const responsePromise = fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-chatbot-chat`,
+        functionUrl,
         {
           method: 'POST',
           headers: {

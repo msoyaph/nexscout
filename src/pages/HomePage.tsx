@@ -114,6 +114,49 @@ export default function HomePage({
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [pageOptions, setPageOptions] = useState<any>(null);
   const [energy, setEnergy] = useState({ current: 0, max: 5 });
+  const [chatbotLink, setChatbotLink] = useState<string | null>(null);
+
+  // Load chatbot link for welcome card
+  useEffect(() => {
+    const loadChatbotLink = async () => {
+      if (!user?.id) return;
+
+      try {
+        // Get chatbot link from chatbot_links table
+        const { data: chatbotLinkData } = await supabase
+          .from('chatbot_links')
+          .select('chatbot_id, custom_slug')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .maybeSingle();
+
+        if (chatbotLinkData) {
+          // Prefer custom_slug if available, otherwise use chatbot_id
+          const slug = chatbotLinkData.custom_slug || chatbotLinkData.chatbot_id;
+          if (slug) {
+            setChatbotLink(slug);
+          }
+        } else {
+          // Fallback: try to get from profiles.unique_user_id
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('unique_user_id')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          if (profileData?.unique_user_id) {
+            setChatbotLink(profileData.unique_user_id);
+          }
+        }
+      } catch (error) {
+        console.error('[HomePage] Error loading chatbot link:', error);
+      }
+    };
+
+    if (user) {
+      loadChatbotLink();
+    }
+  }, [user]);
 
   useEffect(() => {
     if (user && currentPage === 'home') {
@@ -353,7 +396,7 @@ export default function HomePage({
           .from('prospect_reminders')
           .select(`
             *,
-            prospect:prospects(full_name, uploaded_image_url, social_image_url, avatar_seed)
+            prospect:prospects(full_name, profile_image_url, social_image_url, avatar_seed, uploaded_image_url)
           `)
           .eq('user_id', user.id)
           .eq('is_completed', false)
@@ -1022,6 +1065,36 @@ export default function HomePage({
       </header>
 
       <main className="px-6 space-y-6 mt-6">
+        {/* Welcome Card - Test Your Public AI Chatbot */}
+        {chatbotLink && (
+          <section className="bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 rounded-[30px] shadow-[0px_8px_24px_rgba(0,0,0,0.08)] border border-[#E5E7EB] overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-xl flex items-center justify-center">
+                  <MessageSquare className="w-6 h-6 text-white" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-bold text-lg text-gray-900 mb-1">
+                    Welcome! 🎉 Test Your AI Chatbot
+                  </h3>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Check out your personal Public AI Chatbot link and see how it works! Share it with friends or test it yourself.
+                  </p>
+                  <a
+                    href={`${import.meta.env.VITE_APP_URL || 'https://nexscout.co'}/chat/${chatbotLink}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    Test My Chatbot
+                  </a>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
         <section className="bg-white rounded-[30px] shadow-[0px_8px_24px_rgba(0,0,0,0.08)] border border-[#E5E7EB] overflow-hidden">
           <div className="p-5 border-b border-[#E5E7EB] flex justify-between items-center">
             <h2 className="font-bold text-lg flex items-center gap-2">

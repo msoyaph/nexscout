@@ -15,8 +15,18 @@ export function WelcomeBonusModal({ onClose }: WelcomeBonusModalProps) {
   const [isClaiming, setIsClaiming] = useState(false);
   const [claimed, setClaimed] = useState(false);
 
+  // Check if welcome bonus has been claimed (database + localStorage for performance)
   const hasBeenDismissed = () => {
     if (typeof window === 'undefined') return true;
+    
+    // Check database first (most reliable - persists across devices/browsers)
+    if (profile?.welcome_bonus_claimed === true) {
+      // Also update localStorage for performance
+      localStorage.setItem(WELCOME_MODAL_STORAGE_KEY, 'true');
+      return true;
+    }
+    
+    // Fallback to localStorage check (for performance, but database is source of truth)
     return localStorage.getItem(WELCOME_MODAL_STORAGE_KEY) === 'true';
   };
 
@@ -68,7 +78,18 @@ export function WelcomeBonusModal({ onClose }: WelcomeBonusModalProps) {
 
       setClaimed(true);
       
-      // Mark as dismissed immediately when bonus is claimed
+      // Mark as claimed in DATABASE (persists across devices/browsers)
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ welcome_bonus_claimed: true })
+        .eq('id', user.id);
+      
+      if (updateError) {
+        console.error('[WelcomeBonus] Error marking bonus as claimed in database:', updateError);
+        // Continue anyway - localStorage will prevent showing again in this browser
+      }
+      
+      // Also mark in localStorage for immediate UI update
       if (typeof window !== 'undefined') {
         localStorage.setItem(WELCOME_MODAL_STORAGE_KEY, 'true');
       }
@@ -87,10 +108,24 @@ export function WelcomeBonusModal({ onClose }: WelcomeBonusModalProps) {
     }
   };
 
-  const handleClose = () => {
+  const handleClose = async () => {
+    // Mark as dismissed in database (even if not claimed, user dismissed it)
+    if (user) {
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ welcome_bonus_claimed: true })
+        .eq('id', user.id);
+      
+      if (updateError) {
+        console.error('[WelcomeBonus] Error marking bonus as dismissed in database:', updateError);
+      }
+    }
+    
+    // Also mark in localStorage for immediate UI update
     if (typeof window !== 'undefined') {
       localStorage.setItem(WELCOME_MODAL_STORAGE_KEY, 'true');
     }
+    
     onClose();
   };
 
@@ -231,30 +266,69 @@ export function WelcomeBonusModal({ onClose }: WelcomeBonusModalProps) {
 
 // Hook to check if welcome modal should be shown
 export function useWelcomeModal() {
-  const { user, profile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const [shouldShow, setShouldShow] = useState(false);
+  const [refreshAttempts, setRefreshAttempts] = useState(0);
 
   useEffect(() => {
-    if (!user || !profile) {
+    if (!user) {
       setShouldShow(false);
       return;
     }
 
-    // Check if already dismissed
-    const dismissed = localStorage.getItem(WELCOME_MODAL_STORAGE_KEY) === 'true';
+    // PRIORITY 1: Check if welcome bonus has already been claimed (database is source of truth)
+    // This ensures it only shows once per user lifetime, across all devices/browsers
+    if (profile?.welcome_bonus_claimed === true) {
+      // Also update localStorage for performance
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(WELCOME_MODAL_STORAGE_KEY, 'true');
+      }
+      setShouldShow(false);
+      return;
+    }
+    
+    // PRIORITY 2: Fallback - Check localStorage (for performance, but database is authoritative)
+    const dismissed = typeof window !== 'undefined' && localStorage.getItem(WELCOME_MODAL_STORAGE_KEY) === 'true';
     if (dismissed) {
       setShouldShow(false);
       return;
     }
 
-    // Show for new users (onboarding completed)
-    // Only show once per user (tracked by localStorage)
-    if (profile.onboarding_completed) {
-      setShouldShow(true);
+    // PRIORITY 3: If profile is not loaded yet, try to refresh it (max 3 attempts)
+    if (!profile && refreshAttempts < 3) {
+      setRefreshAttempts(prev => prev + 1);
+      refreshProfile().then(() => {
+        // Will re-run this effect when profile is loaded
+      });
+      return;
+    }
+
+    // PRIORITY 4: If profile exists but onboarding_completed is not set, try refreshing once more
+    if (profile && profile.onboarding_completed === false && refreshAttempts < 3) {
+      setRefreshAttempts(prev => prev + 1);
+      // Wait a bit then refresh again
+      setTimeout(() => {
+        refreshProfile();
+      }, 1500);
+      return;
+    }
+
+    // PRIORITY 5: Show ONLY for new users who just completed onboarding
+    // Must meet ALL conditions:
+    // 1. Onboarding is completed
+    // 2. Welcome bonus has NOT been claimed yet (checked above)
+    // 3. This is a new user signup (not an existing user)
+    if (profile?.onboarding_completed === true && profile?.welcome_bonus_claimed !== true) {
+      console.log('[WelcomeModal] ✅ New user onboarding completed, showing welcome bonus modal');
+      // Add a delay to ensure smooth transition after onboarding
+      const timer = setTimeout(() => {
+        setShouldShow(true);
+      }, 2500); // Increased delay to ensure profile is fully refreshed and page is loaded
+      return () => clearTimeout(timer);
     } else {
       setShouldShow(false);
     }
-  }, [user, profile]);
+  }, [user, profile, refreshProfile, refreshAttempts]);
 
   return shouldShow;
 }

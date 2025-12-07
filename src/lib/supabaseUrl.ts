@@ -31,12 +31,25 @@ export function getSupabaseUrl(): string {
  * Ensures proper URL formatting without double slashes
  */
 export function getSupabaseFunctionUrl(functionPath: string): string {
-  const baseUrl = getSupabaseUrl();
+  let baseUrl = getSupabaseUrl();
+  
+  // Remove any trailing slashes from base URL (defensive)
+  baseUrl = baseUrl.replace(/\/+$/, '');
   
   // Remove leading slash from functionPath if present
   const cleanPath = functionPath.startsWith('/') ? functionPath.slice(1) : functionPath;
   
   // Ensure single slash between base URL and path
-  return `${baseUrl}/${cleanPath}`;
+  const finalUrl = `${baseUrl}/${cleanPath}`;
+  
+  // Final validation: ensure no double slashes (except after https://)
+  const normalizedUrl = finalUrl.replace(/([^:]\/)\/+/g, '$1');
+  
+  // Log warning if URL still has issues (for debugging)
+  if (normalizedUrl.includes('http://')) {
+    console.error('[Supabase URL] ⚠️ WARNING: URL still contains HTTP!', normalizedUrl);
+  }
+  
+  return normalizedUrl;
 }
 

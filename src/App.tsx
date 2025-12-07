@@ -273,6 +273,11 @@ function AppContent() {
       <QuickOnboardingFlow
         onComplete={async () => {
           console.log('[App] Onboarding completed! Refreshing profile...');
+          // Refresh profile multiple times to ensure it's updated
+          await refreshProfile();
+          // Wait a bit for the database update to propagate
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          // Refresh again to get the latest data
           await refreshProfile();
           setAuthView('login'); // Clear onboarding view
           setCurrentPage('home');

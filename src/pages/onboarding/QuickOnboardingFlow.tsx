@@ -72,12 +72,15 @@ export default function QuickOnboardingFlow({ onComplete, onNavigate }: QuickOnb
           console.error('[QuickOnboarding] Error marking complete:', error);
         } else {
           console.log('[QuickOnboarding] ✅ Onboarding marked complete');
+          // Longer delay to ensure database update is committed and propagated
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
       } catch (err) {
         console.error('[QuickOnboarding] Error:', err);
       }
     }
     
+    // Call onComplete which will trigger profile refresh in App.tsx
     onComplete();
   }
 

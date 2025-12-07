@@ -1,109 +1,116 @@
-# 🚀 Quick Production Deployment Guide
+# 🚀 Deploy to Production - Quick Guide
 
-## Step 1: Build the Application
+## Option 1: Run the Deployment Script
+
 ```bash
-npm run build
+./deploy-to-production.sh
 ```
 
-## Step 2: Deploy to Vercel
+This script will:
+1. Stage all changes
+2. Commit with a descriptive message
+3. Push to `origin main`
+4. Trigger Vercel deployment automatically
 
-### Option A: Using Vercel CLI (Recommended)
+## Option 2: Manual Deployment
 
-1. **Install Vercel CLI (if not installed):**
-   ```bash
-   npm i -g vercel
-   ```
-
-2. **Login to Vercel:**
-   ```bash
-   vercel login
-   ```
-
-3. **Deploy to Production:**
-   ```bash
-   vercel --prod
-   ```
-
-### Option B: Using GitHub Integration
-
-1. **Push code to GitHub:**
-   ```bash
-   git add .
-   git commit -m "Production deployment"
-   git push origin main
-   ```
-
-2. **Connect to Vercel:**
-   - Go to https://vercel.com
-   - Click "New Project"
-   - Import your GitHub repository
-   - Vercel will auto-detect settings and deploy
-
-## Step 3: Configure Environment Variables
-
-**CRITICAL:** Add these in Vercel Dashboard → Project Settings → Environment Variables:
-
-```
-VITE_SUPABASE_URL=https://your-production-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-production-anon-key
-VITE_APP_URL=https://nexscout.co
-VITE_FACEBOOK_APP_ID=your-facebook-app-id (optional)
+### Step 1: Check Status
+```bash
+git status
 ```
 
-**Important:**
-- Make sure `VITE_SUPABASE_URL` uses HTTPS (not HTTP)
-- Add these for **Production** environment
-- Redeploy after adding environment variables
+### Step 2: Stage All Changes
+```bash
+git add .
+```
 
-## Step 4: Connect Domain (nexscout.co)
+### Step 3: Commit Changes
+```bash
+git commit -m "Fix: Public chat production readiness - HTTPS normalization, error handling, .maybeSingle() queries
 
-1. Go to Vercel Dashboard → Project → Settings → Domains
-2. Add `nexscout.co` and `www.nexscout.co`
-3. Update DNS records as instructed by Vercel
-4. Wait for DNS propagation (5-30 minutes)
+- Fixed .single() to .maybeSingle() in PublicChatPage for better error handling
+- Enhanced URL normalization in supabaseUrl.ts (HTTPS enforcement, double-slash removal)
+- Added defensive URL validation in PublicChatPage
+- Created production readiness checklist and documentation
+- All fixes ensure public chatbot works correctly in production"
+```
 
-## Step 5: Verify Deployment
+### Step 4: Push to Remote
+```bash
+git push origin main
+```
 
-1. Visit your production URL
-2. Test critical flows:
-   - ✅ Signup/Login
-   - ✅ Public chat routes (`/chat/[slug]`)
-   - ✅ Terms/Privacy (`/terms`, `/privacy`)
-   - ✅ Main dashboard
+## ⚠️ CRITICAL: Before Deployment Completes
 
-## Troubleshooting
+### Verify Vercel Environment Variables
 
-### Build Fails
-- Check for TypeScript errors: `npm run typecheck`
-- Check for linting errors: `npm run lint`
-- Verify all dependencies installed: `npm install`
+1. Go to **Vercel Dashboard** → Your Project → **Settings** → **Environment Variables**
 
-### Environment Variables Not Working
-- Make sure variables start with `VITE_`
-- Redeploy after adding variables
-- Check Vercel build logs
+2. Verify these are set for **Production**:
+   ```
+   VITE_SUPABASE_URL=https://dohrkewdanppkqulvhhz.supabase.co
+   VITE_SUPABASE_ANON_KEY=your_anon_key_here
+   VITE_APP_URL=https://nexscout.co
+   ```
 
-### 404 Errors on Routes
-- Verify `vercel.json` is in root directory
-- Check that all routes redirect to `index.html`
+3. **IMPORTANT:**
+   - Must be `https://` (NOT `http://`)
+   - No trailing slashes
+   - All variables must be set
 
-### Mixed Content Errors
-- Ensure `VITE_SUPABASE_URL` uses HTTPS
-- Check Supabase CORS settings
+## 📊 Monitor Deployment
 
-## Post-Deployment Checklist
+1. Go to **Vercel Dashboard** → Your Project → **Deployments**
+2. Watch for the latest deployment to complete
+3. Check build logs for any errors
+4. Wait for deployment to finish (usually 2-5 minutes)
 
-- [ ] Test signup flow
-- [ ] Test login flow
-- [ ] Test public chat (`/chat/[slug]`)
-- [ ] Test Terms/Privacy pages
-- [ ] Verify environment variables loaded
-- [ ] Check browser console for errors
-- [ ] Test on mobile device
-- [ ] Verify HTTPS is working
-- [ ] Check Supabase connection
+## ✅ Test After Deployment
+
+1. **Test Public Chat:**
+   - Open: `https://nexscout.co/chat/[your-chatbot-id]`
+   - Use **incognito/private browser** (to test without login)
+   - Should load without authentication
+   - Send a test message
+   - Should receive AI response
+
+2. **Check Browser Console:**
+   - Press F12 → Console tab
+   - Look for any errors
+   - Should see: `[PublicChat] Calling edge function: https://...`
+
+3. **Test Error Handling:**
+   - Try invalid chatbot ID → Should show "Chat not found"
+   - Test network failure scenarios
+
+## 🎯 Success Indicators
+
+✅ Deployment completes without errors
+✅ Public chat loads without login
+✅ Messages send successfully
+✅ AI responses appear
+✅ No console errors
+✅ No mixed content warnings
+
+## 🚨 If Issues Occur
+
+1. **Check Vercel Logs:**
+   - Go to Vercel Dashboard → Your Project → Logs
+   - Look for build errors or runtime errors
+
+2. **Check Environment Variables:**
+   - Verify all env vars are set correctly
+   - Ensure HTTPS URLs (not HTTP)
+   - Ensure no trailing slashes
+
+3. **Check Browser Console:**
+   - Look for specific error messages
+   - Check network tab for failed requests
+
+4. **Verify Database:**
+   - Check if RPC function exists: `get_user_from_chatbot_id`
+   - Verify RLS policies allow anonymous access
 
 ---
 
-**Ready to deploy?** Run the commands above! 🚀
-
+**Ready to deploy?** Run `./deploy-to-production.sh` or follow the manual steps above!

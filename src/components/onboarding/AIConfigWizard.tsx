@@ -268,10 +268,10 @@ ${autoSettings.microCTAs.join('\n')}`;
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-2">
       <div className="max-w-4xl mx-auto py-8">
         {/* Progress Steps */}
-        <div className="bg-white rounded-3xl shadow-xl p-8 mb-6">
+        <div className="bg-white rounded-3xl shadow-xl p-4 mb-6">
           <div className="flex items-center justify-between mb-8">
             {steps.map((step, index) => {
               const Icon = step.icon;
@@ -326,7 +326,7 @@ ${autoSettings.microCTAs.join('\n')}`;
             {currentStep === 1 && (
               <div className="space-y-6">
                 <div className="text-center mb-6">
-                  <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                  <h2 className="text-lg font-bold text-gray-900 mb-2">
                     <Building2 className="w-8 h-8 inline mr-2 text-blue-500" />
                     Company Information
                   </h2>
@@ -380,7 +380,7 @@ ${autoSettings.microCTAs.join('\n')}`;
             {currentStep === 2 && (
               <div className="space-y-6">
                 <div className="text-center mb-6">
-                  <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                  <h2 className="text-lg font-bold text-gray-900 mb-2">
                     <MessageCircle className="w-8 h-8 inline mr-2 text-pink-500" />
                     Contact Information
                   </h2>
@@ -428,7 +428,7 @@ ${autoSettings.microCTAs.join('\n')}`;
             {currentStep === 3 && (
               <div className="space-y-4">
                 <div className="text-center mb-4">
-                  <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                  <h2 className="text-lg font-bold text-gray-900 mb-2">
                     <Sparkles className="w-8 h-8 inline mr-2 text-green-500" />
                     AI Configuration
                   </h2>

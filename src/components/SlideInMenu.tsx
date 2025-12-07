@@ -47,18 +47,36 @@ export default function SlideInMenu({ isOpen, onClose, onNavigate }: SlideInMenu
 
   async function loadUserImage() {
     try {
+      // Try uploaded_image_url first, fallback to avatar_url if it doesn't exist
       const { data, error } = await supabase
         .from('profiles')
-        .select('uploaded_image_url')
+        .select('uploaded_image_url, avatar_url')
         .eq('id', profile?.id)
         .maybeSingle();
 
-      if (error) throw error;
+      if (error) {
+        // If column doesn't exist, try avatar_url
+        if (error.code === '42703') {
+          const { data: fallbackData } = await supabase
+            .from('profiles')
+            .select('avatar_url')
+            .eq('id', profile?.id)
+            .maybeSingle();
+          
+          if (fallbackData?.avatar_url) {
+            setUploadedImageUrl(fallbackData.avatar_url);
+          }
+          return;
+        }
+        throw error;
+      }
+      
       if (data) {
-        setUploadedImageUrl(data.uploaded_image_url);
+        setUploadedImageUrl(data.uploaded_image_url || data.avatar_url || null);
       }
     } catch (error) {
       console.error('Error loading user image:', error);
+      // Silently fail - user can still use the menu without image
     }
   }
 
@@ -82,10 +100,23 @@ export default function SlideInMenu({ isOpen, onClose, onNavigate }: SlideInMenu
         .from('prospect-images')
         .getPublicUrl(filePath);
 
-      const { error: updateError } = await supabase
+      // Try uploaded_image_url first, fallback to avatar_url
+      let updateError;
+      const { error: error1 } = await supabase
         .from('profiles')
         .update({ uploaded_image_url: publicUrl })
         .eq('id', user.id);
+      
+      if (error1?.code === '42703') {
+        // Column doesn't exist, try avatar_url
+        const { error: error2 } = await supabase
+          .from('profiles')
+          .update({ avatar_url: publicUrl })
+          .eq('id', user.id);
+        updateError = error2;
+      } else {
+        updateError = error1;
+      }
 
       if (updateError) throw updateError;
 
@@ -424,10 +455,23 @@ export default function SlideInMenu({ isOpen, onClose, onNavigate }: SlideInMenu
                 <button
                   onClick={async () => {
                     try {
-                      const { error } = await supabase
+                      // Try uploaded_image_url first, fallback to avatar_url
+                      let error;
+                      const { error: error1 } = await supabase
                         .from('profiles')
                         .update({ uploaded_image_url: null })
                         .eq('id', user?.id);
+                      
+                      if (error1?.code === '42703') {
+                        // Column doesn't exist, try avatar_url
+                        const { error: error2 } = await supabase
+                          .from('profiles')
+                          .update({ avatar_url: null })
+                          .eq('id', user?.id);
+                        error = error2;
+                      } else {
+                        error = error1;
+                      }
 
                       if (error) throw error;
 
