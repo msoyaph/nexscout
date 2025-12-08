@@ -940,68 +940,6 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
       )}
 
 
-          {/* Floating Contact Menu Button */}
-      <div className="fixed bottom-6 right-6 z-[100]">
-        {/* Contact Menu Options - Always show vertically when menu is open */}
-        {showContactMenu && (
-          <div className="mb-4 space-y-3 flex flex-col">
-            {/* Call Button - Disabled if no phone */}
-            <button
-              onClick={handleCall}
-              disabled={!hasPhone}
-              className={`w-14 h-14 bg-green-500 rounded-full shadow-lg flex items-center justify-center text-white transition-all ${
-                hasPhone 
-                  ? 'hover:shadow-xl hover:scale-110 active:scale-95 cursor-pointer' 
-                  : 'opacity-50 cursor-not-allowed'
-              }`}
-              aria-label={hasPhone ? 'Call prospect' : 'Call unavailable - no phone number'}
-              title={hasPhone ? 'Call' : 'No phone number available'}
-            >
-              <Phone className="w-6 h-6" />
-            </button>
-
-            {/* Message Button - Always enabled */}
-            <button
-              onClick={handleMessage}
-              className="w-14 h-14 bg-[#1877F2] rounded-full shadow-lg hover:shadow-xl flex items-center justify-center text-white transition-all hover:scale-110 active:scale-95 cursor-pointer"
-              aria-label="Message prospect"
-              title="Message"
-            >
-              <MessageSquare className="w-6 h-6" />
-            </button>
-
-            {/* Email Button - Disabled if no email */}
-            <button
-              onClick={handleEmail}
-              disabled={!hasEmail}
-              className={`w-14 h-14 bg-pink-500 rounded-full shadow-lg flex items-center justify-center text-white transition-all ${
-                hasEmail 
-                  ? 'hover:shadow-xl hover:scale-110 active:scale-95 cursor-pointer' 
-                  : 'opacity-50 cursor-not-allowed'
-              }`}
-              aria-label={hasEmail ? 'Email prospect' : 'Email unavailable - no email address'}
-              title={hasEmail ? 'Email' : 'No email address available'}
-            >
-              <Mail className="w-6 h-6" />
-            </button>
-          </div>
-        )}
-
-        {/* Main Contact Button - Shows X when menu is open */}
-        <button
-          onClick={() => setShowContactMenu(!showContactMenu)}
-          className={`w-14 h-14 rounded-full shadow-lg hover:shadow-xl flex items-center justify-center text-white transition-all hover:scale-110 active:scale-95 ${
-            showContactMenu ? 'bg-gray-800' : 'bg-black'
-          }`}
-          aria-label={showContactMenu ? 'Close contact menu' : 'Open contact menu'}
-        >
-          {showContactMenu ? (
-            <X className="w-6 h-6" />
-          ) : (
-            <MessageCircle className="w-6 h-6" />
-          )}
-        </button>
-      </div>
     </div>
   );
 }
