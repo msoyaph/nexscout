@@ -18,7 +18,16 @@ import {
   AlertCircle,
   Crown,
   Zap,
-  MessageSquare
+  MessageSquare,
+  Facebook,
+  CheckCircle,
+  Instagram,
+  Globe,
+  Phone,
+  Video,
+  Send,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import SlideInMenu from '../components/SlideInMenu';
 import ActionPopup from '../components/ActionPopup';
@@ -96,6 +105,7 @@ export default function HomePage({
   initialPage
 }: HomePageProps) {
   const { user, profile, signOut } = useAuth();
+  const isSuperAdmin = user?.email === 'geoffmax22@gmail.com';
   const [menuOpen, setMenuOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState<string>(initialPage || 'home');
   const [showActionPopup, setShowActionPopup] = useState(false);
@@ -115,6 +125,18 @@ export default function HomePage({
   const [pageOptions, setPageOptions] = useState<any>(null);
   const [energy, setEnergy] = useState({ current: 0, max: 5 });
   const [chatbotLink, setChatbotLink] = useState<string | null>(null);
+
+  // Verification states
+  const [chatbotVerified, setChatbotVerified] = useState(false);
+  const [facebookVerified, setFacebookVerified] = useState(false);
+  const [instagramVerified, setInstagramVerified] = useState(false);
+  const [webChatVerified, setWebChatVerified] = useState(false);
+  const [whatsappVerified, setWhatsappVerified] = useState(false);
+  const [tiktokVerified, setTiktokVerified] = useState(false);
+  const [telegramVerified, setTelegramVerified] = useState(false);
+  
+  // Collapsible state
+  const [showMoreButtons, setShowMoreButtons] = useState(false);
 
   // Load chatbot link for welcome card
   useEffect(() => {
@@ -405,7 +427,15 @@ export default function HomePage({
           .order('reminder_date', { ascending: true })
           .limit(5);
 
-        if (!remindersError && reminders) {
+        // Handle 404 error (table doesn't exist) gracefully
+        if (remindersError) {
+          // If table doesn't exist (404), skip reminders
+          if (remindersError.code === 'PGRST116' || remindersError.message?.includes('404')) {
+            console.log('prospect_reminders table not found, skipping reminders');
+          } else {
+            console.error('Error loading reminders:', remindersError);
+          }
+        } else if (reminders) {
           reminders.forEach((reminder: any) => {
             const reminderTime = new Date(reminder.reminder_date);
             const hoursUntil = Math.round((reminderTime.getTime() - now.getTime()) / (1000 * 60 * 60));
@@ -1080,15 +1110,82 @@ export default function HomePage({
                   <p className="text-sm text-gray-600 mb-4">
                     Check out your personal Public AI Chatbot link and see how it works! Share it with friends or test it yourself.
                   </p>
-                  <a
-                    href={`${import.meta.env.VITE_APP_URL || 'https://nexscout.co'}/chat/${chatbotLink}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl"
-                  >
-                    <MessageSquare className="w-4 h-4" />
-                    Test My Chatbot
-                  </a>
+                  <div className="flex flex-col gap-2">
+                    <a
+                      href={`${import.meta.env.VITE_APP_URL || 'https://nexscout.co'}/chat/${chatbotLink}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex relative items-center gap-2 px-5 py-2.5 bg-[#1877F2] text-white font-semibold rounded-lg hover:bg-[#166FE5] transition-colors"
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                      Test My Chatbot
+                      {chatbotVerified && (
+                        <CheckCircle className="w-4 h-4 text-green-300 ml-auto" />
+                      )}
+                      {chatbotVerified && (
+                        <CheckCircle className="w-4 h-4 text-green-300 ml-auto" />
+                      )}
+                    </a>
+                    <button
+                      onClick={() => {
+                        const isProUser = profile?.subscription_tier === 'pro' || isSuperAdmin;
+                        if (isProUser) {
+                          const fbAppId = import.meta.env.VITE_FACEBOOK_APP_ID || 'YOUR_FB_APP_ID';
+                          const redirectUri = `${window.location.origin}/api/facebook/callback`;
+                          const scopes = 'pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement';
+                          const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes}&state=${user?.id}`;
+                          window.location.href = authUrl;
+                        }
+                      }}
+                      disabled={profile?.subscription_tier !== 'pro' && !isSuperAdmin}
+                      className={`inline-flex items-center gap-2 px-5 py-2.5 font-semibold rounded-xl transition-all shadow-lg relative ${
+                        profile?.subscription_tier === 'pro' || isSuperAdmin
+                          ? 'bg-white text-[#1877F2] border border-[#E4E6EB] hover:bg-[#F0F2F5] cursor-pointer'
+                          : 'bg-[#E4E6EB] text-[#8A8D91] cursor-not-allowed'
+                      }`}
+                      title={profile?.subscription_tier === 'pro' || isSuperAdmin ? 'Connect your Facebook Page' : 'Pro feature - Upgrade to connect your Facebook Page'}
+                    >
+                      {profile?.subscription_tier !== 'pro' && !isSuperAdmin && (
+                        <Crown className="w-4 h-4 text-amber-500 absolute -top-1 -right-1" />
+                      )}
+                      <Facebook className="w-4 h-4" />
+                      Connect Your FB Page
+                      {profile?.subscription_tier !== 'pro' && !isSuperAdmin && (
+                        <span className="text-xs ml-1">(Pro)</span>
+                      )}
+                      {facebookVerified && (
+                        <CheckCircle className="w-4 h-4 text-green-300 ml-auto" />
+                      )}
+                    </button>
+                    <button
+                      onClick={() => {
+                        const isProUser = profile?.subscription_tier === 'pro' || isSuperAdmin;
+                        if (isProUser) {
+                          // TODO: Add Instagram connection logic
+                          onNavigate?.('chatbot-settings');
+                        }
+                      }}
+                      disabled={profile?.subscription_tier !== 'pro' && !isSuperAdmin}
+                      className={`inline-flex items-center gap-2 px-5 py-2.5 font-semibold rounded-xl transition-all shadow-lg relative ${
+                        profile?.subscription_tier === 'pro' || isSuperAdmin
+                          ? 'bg-[#E4405F] text-white cursor-pointer'
+                          : 'bg-[#E4E6EB] text-[#8A8D91] cursor-not-allowed'
+                      }`}
+                      title={profile?.subscription_tier === 'pro' || isSuperAdmin ? 'Connect Instagram' : 'Pro feature - Upgrade to connect Instagram'}
+                    >
+                      {profile?.subscription_tier !== 'pro' && !isSuperAdmin && (
+                        <Crown className="w-4 h-4 text-amber-500 absolute -top-1 -right-1" />
+                      )}
+                      <Instagram className="w-4 h-4" />
+                      Connect Instagram
+                      {instagramVerified && (
+                        <CheckCircle className="w-4 h-4 text-green-300 ml-auto" />
+                      )}
+                      {profile?.subscription_tier !== 'pro' && !isSuperAdmin && (
+                        <span className="text-xs ml-1">(Pro)</span>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

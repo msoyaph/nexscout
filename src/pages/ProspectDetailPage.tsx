@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Flame, MessageCircle, FileText, TrendingUp, Sparkles, Lock, Plus, Bell, MoreHorizontal, Trash2 } from 'lucide-react';
+import { ArrowLeft, Flame, MessageCircle, FileText, TrendingUp, Sparkles, Lock, Plus, Bell, MoreHorizontal, Trash2, Phone, Mail, MessageSquare, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import type { ProspectWithScore } from '../lib/types/scanning';
 import GenerateMessageModal from '../components/GenerateMessageModal';
@@ -34,6 +34,7 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
   const [prospect, setProspect] = useState<any>(initialProspect);
   const [loading, setLoading] = useState(!initialProspect && !!prospectId);
   const [error, setError] = useState<string | null>(null);
+  const [showContactMenu, setShowContactMenu] = useState(false);
   const [regeneratingScore, setRegeneratingScore] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [upgradeFeature, setUpgradeFeature] = useState<'sequence' | 'deck' | 'deepscan' | 'automation'>('sequence');
@@ -273,6 +274,68 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
   const canAccessFeature = (feature: 'sequence' | 'deck' | 'deepscan') => {
     // All Pro features (Elite tier removed)
     return profile?.subscription_tier === 'pro';
+
+  // Contact menu handlers
+  const handleCall = () => {
+    const phoneNumber = prospect?.phone || prospect?.metadata?.phone || prospect?.contact_phone || prospect?.metadata?.contact_phone;
+    if (phoneNumber && String(phoneNumber).trim().length > 0) {
+      window.location.href = `tel:${phoneNumber}`;
+    } else {
+      alert('No phone number available for this prospect.');
+    }
+    setShowContactMenu(false);
+  };
+
+  const handleMessage = async () => {
+    if (!prospect?.id || !user?.id) {
+      alert('Unable to find prospect or user information.');
+      setShowContactMenu(false);
+      return;
+    }
+
+    try {
+      // Find chatbot session for this prospect
+      const phoneValue = prospect?.phone || prospect?.metadata?.phone || prospect?.contact_phone || prospect?.metadata?.contact_phone;
+      const emailValue = prospect?.email || prospect?.metadata?.email || prospect?.contact_email || prospect?.metadata?.contact_email;
+      
+      const { data: session } = await supabase
+        .from('public_chat_sessions')
+        .select('id')
+        .eq('user_id', user.id)
+        .or(`visitor_name.eq.${prospect.full_name || ''},visitor_email.eq.${emailValue || ''},visitor_phone.eq.${phoneValue || ''}`)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (session?.id) {
+        onNavigate?.('chatbot-session-viewer', { sessionId: session.id });
+      } else {
+        alert('No chat session found for this prospect. Start a new conversation from the chatbot sessions page.');
+      }
+    } catch (error) {
+      console.error('Error finding chat session:', error);
+      alert('Unable to find chat session. Please try again.');
+    }
+    setShowContactMenu(false);
+  };
+
+  const handleEmail = () => {
+    const email = prospect?.email || prospect?.metadata?.email || prospect?.contact_email || prospect?.metadata?.contact_email;
+    if (email && String(email).trim().length > 0) {
+      window.location.href = `mailto:${email}`;
+    } else {
+      alert('No email address available for this prospect.');
+    }
+    setShowContactMenu(false);
+  };
+
+  // Get contact data availability - check multiple possible locations and filter out empty strings
+  const phoneValue = prospect?.phone || prospect?.metadata?.phone || prospect?.contact_phone || prospect?.metadata?.contact_phone;
+  const hasPhone = !!(phoneValue && String(phoneValue).trim().length > 0);
+  
+  const emailValue = prospect?.email || prospect?.metadata?.email || prospect?.contact_email || prospect?.metadata?.contact_email;
+  const hasEmail = !!(emailValue && String(emailValue).trim().length > 0);
+
   };
 
   return (
@@ -616,6 +679,29 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
             </div>
             <Lock className="size-5 text-gray-700" />
           </button>
+
+          {/* AI-Powered Call */}
+          <button
+            onClick={() => {
+              alert('AI-Powered Call feature coming soon! This will allow you to make AI-assisted calls to prospects.');
+            }}
+            className="w-full flex items-center justify-between p-4 bg-white border-2 border-gray-200 rounded-2xl hover:border-green-500 transition-all relative overflow-hidden"
+          >
+            <div className="absolute top-2 right-2 px-3 py-1 bg-gradient-to-r from-amber-400 to-amber-600 text-white text-xs font-bold rounded-full flex items-center gap-1 z-10">
+              <Lock className="size-3" />
+              Coming Soon
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="size-12 rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 flex items-center justify-center">
+                <Phone className="size-6 text-green-600" />
+              </div>
+              <div className="text-left">
+                <div className="font-bold text-gray-900">AI-Powered Call</div>
+                <div className="text-xs text-gray-600">AI-assisted phone call • Coming soon</div>
+              </div>
+            </div>
+            <Lock className="size-5 text-gray-400" />
+          </button>
         </section>
 
         <section className="space-y-3">
@@ -852,6 +938,70 @@ export default function ProspectDetailPage({ onBack, onNavigate, prospect: initi
           onCancel={() => automation.setShowProgress(false)}
         />
       )}
+
+
+          {/* Floating Contact Menu Button */}
+      <div className="fixed bottom-6 right-6 z-[100]">
+        {/* Contact Menu Options - Always show vertically when menu is open */}
+        {showContactMenu && (
+          <div className="mb-4 space-y-3 flex flex-col">
+            {/* Call Button - Disabled if no phone */}
+            <button
+              onClick={handleCall}
+              disabled={!hasPhone}
+              className={`w-14 h-14 bg-green-500 rounded-full shadow-lg flex items-center justify-center text-white transition-all ${
+                hasPhone 
+                  ? 'hover:shadow-xl hover:scale-110 active:scale-95 cursor-pointer' 
+                  : 'opacity-50 cursor-not-allowed'
+              }`}
+              aria-label={hasPhone ? 'Call prospect' : 'Call unavailable - no phone number'}
+              title={hasPhone ? 'Call' : 'No phone number available'}
+            >
+              <Phone className="w-6 h-6" />
+            </button>
+
+            {/* Message Button - Always enabled */}
+            <button
+              onClick={handleMessage}
+              className="w-14 h-14 bg-[#1877F2] rounded-full shadow-lg hover:shadow-xl flex items-center justify-center text-white transition-all hover:scale-110 active:scale-95 cursor-pointer"
+              aria-label="Message prospect"
+              title="Message"
+            >
+              <MessageSquare className="w-6 h-6" />
+            </button>
+
+            {/* Email Button - Disabled if no email */}
+            <button
+              onClick={handleEmail}
+              disabled={!hasEmail}
+              className={`w-14 h-14 bg-pink-500 rounded-full shadow-lg flex items-center justify-center text-white transition-all ${
+                hasEmail 
+                  ? 'hover:shadow-xl hover:scale-110 active:scale-95 cursor-pointer' 
+                  : 'opacity-50 cursor-not-allowed'
+              }`}
+              aria-label={hasEmail ? 'Email prospect' : 'Email unavailable - no email address'}
+              title={hasEmail ? 'Email' : 'No email address available'}
+            >
+              <Mail className="w-6 h-6" />
+            </button>
+          </div>
+        )}
+
+        {/* Main Contact Button - Shows X when menu is open */}
+        <button
+          onClick={() => setShowContactMenu(!showContactMenu)}
+          className={`w-14 h-14 rounded-full shadow-lg hover:shadow-xl flex items-center justify-center text-white transition-all hover:scale-110 active:scale-95 ${
+            showContactMenu ? 'bg-gray-800' : 'bg-black'
+          }`}
+          aria-label={showContactMenu ? 'Close contact menu' : 'Open contact menu'}
+        >
+          {showContactMenu ? (
+            <X className="w-6 h-6" />
+          ) : (
+            <MessageCircle className="w-6 h-6" />
+          )}
+        </button>
+      </div>
     </div>
   );
 }
