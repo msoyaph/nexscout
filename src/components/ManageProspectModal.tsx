@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { X, User, Mail, Phone, FileText, Upload, Image as ImageIcon, Save } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { prospectSyncService } from '../services/prospects/prospectSyncService';
 import ProspectAvatar from './ProspectAvatar';
 
 interface ManageProspectModalProps {
@@ -126,6 +127,13 @@ export default function ManageProspectModal({
         .eq('id', prospectId);
 
       if (error) throw error;
+
+      // Sync to all related sessions
+      await prospectSyncService.syncProspectToSessions(prospectId, {
+        name: formData.full_name.trim() || undefined,
+        email: formData.email.trim() || undefined,
+        phone: formData.phone.trim() || undefined
+      });
 
       onClose();
       onProspectUpdated();
@@ -294,4 +302,7 @@ export default function ManageProspectModal({
     </div>
   );
 }
+
+
+
 

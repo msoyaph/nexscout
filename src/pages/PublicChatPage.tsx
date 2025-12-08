@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, User, MessageCircle, Loader2 } from 'lucide-react';
+import { Send, User, MessageCircle, Loader2, Share2, Copy, CheckCircle, X, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getSupabaseFunctionUrl } from '../lib/supabaseUrl';
 
@@ -25,6 +25,13 @@ export default function PublicChatPage({ slug, onNavigate }: PublicChatPageProps
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [monthlyChatCount, setMonthlyChatCount] = useState(0);
+  const [chatLimit, setChatLimit] = useState(30);
+  const [isProUser, setIsProUser] = useState(false);
+  const [isLimitReached, setIsLimitReached] = useState(false);
+  const [showPayAsYouGoModal, setShowPayAsYouGoModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const channelRef = useRef<any>(null);
@@ -269,13 +276,27 @@ export default function PublicChatPage({ slug, onNavigate }: PublicChatPageProps
       }
 
       // Check monthly chat limit before creating new session
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('subscription_tier')
+        .select('subscription_tier, email')
         .eq('id', chatUserId)
         .maybeSingle();
 
-      const isProUser = profile?.subscription_tier === 'pro';
+      if (profileError) {
+        console.error('[PublicChat] Error loading profile:', profileError);
+      }
+
+      // Check Pro tier - case insensitive and handle null/undefined
+      const subscriptionTier = profile?.subscription_tier?.toLowerCase()?.trim() || 'free';
+      const isProUser = subscriptionTier === 'pro';
+
+      console.log('[PublicChat] User tier check:', {
+        chatUserId,
+        subscriptionTier,
+        rawTier: profile?.subscription_tier,
+        isProUser,
+        profileEmail: profile?.email
+      });
       const chatLimit = isProUser ? 300 : 30;
 
       // Count monthly chats
@@ -288,15 +309,26 @@ export default function PublicChatPage({ slug, onNavigate }: PublicChatPageProps
         .gte('created_at', startOfMonth.toISOString())
         .neq('status', 'archived');
 
-      if ((monthlyChatCount || 0) >= chatLimit) {
-        console.error('[PublicChat] Monthly chat limit reached:', monthlyChatCount, '/', chatLimit);
-        setError(
-          isProUser
-            ? 'You have reached your monthly chat limit (300). Please purchase additional chats to continue.'
-            : 'You have reached your monthly chat limit (30). Upgrade to Pro for 300 chats/month.'
-        );
+      const currentCount = monthlyChatCount || 0;
+      setMonthlyChatCount(currentCount);
+      
+      // Set user tier and limit state
+      setIsProUser(isProUser);
+      setChatLimit(chatLimit);
+      
+      // Check if limit is reached - BLOCK non-Pro users, allow Pro users to continue
+      if (currentCount >= chatLimit && !isProUser) {
+        console.log('[PublicChat] ❌ Monthly chat limit reached for free user:', currentCount, '/', chatLimit);
+        setIsLimitReached(true);
+        setError(`You have reached your monthly chat limit (${chatLimit}). Upgrade to Pro for 300 chats/month.`);
         setIsLoading(false);
         return;
+      } else if (currentCount >= chatLimit && isProUser) {
+        // Pro users can continue even if they hit 300 (they can purchase more)
+        console.log('[PublicChat] ✅ Pro user at limit:', currentCount, '/', chatLimit, '- allowing continuation');
+        setIsLimitReached(true);
+      } else {
+        setIsLimitReached(false);
       }
 
       // Create new session for this visitor
@@ -604,23 +636,33 @@ export default function PublicChatPage({ slug, onNavigate }: PublicChatPageProps
       {/* Header */}
       <div className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-4xl mx-auto px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-full flex items-center justify-center flex-shrink-0">
-              {chatbotSettings?.avatar_url ? (
-                <img src={chatbotSettings.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
-              ) : (
-                <MessageCircle className="w-6 h-6 text-white" />
-              )}
-            </div>
-            <div className="flex-1">
-              <h1 className="font-semibold text-gray-900">
-                {chatbotSettings?.display_name || 'AI Assistant'}
-              </h1>
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                Online · Powered by NexScout
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-full flex items-center justify-center flex-shrink-0">
+                {chatbotSettings?.avatar_url ? (
+                  <img src={chatbotSettings.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                ) : (
+                  <MessageCircle className="w-6 h-6 text-white" />
+                )}
+              </div>
+              <div className="flex-1">
+                <h1 className="font-semibold text-gray-900">
+                  {chatbotSettings?.display_name || 'AI Assistant'}
+                </h1>
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  Online · Powered by NexScout
+                </div>
               </div>
             </div>
+            <button
+              onClick={() => setShowShareModal(true)}
+              className="p-2.5 hover:bg-blue-50 rounded-full transition-all flex-shrink-0 border border-gray-300 hover:border-blue-400 active:scale-95 bg-white shadow-sm"
+              title="Share chat"
+              aria-label="Share chat"
+            >
+              <Share2 className="w-5 h-5 text-gray-700 hover:text-blue-600" strokeWidth={2} />
+            </button>
           </div>
         </div>
       </div>
@@ -752,6 +794,104 @@ export default function PublicChatPage({ slug, onNavigate }: PublicChatPageProps
           </div>
         </div>
       </div>
+
+      {/* Share Modal */}
+      {showShareModal && (
+        <>
+          <div 
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40" 
+            onClick={() => setShowShareModal(false)} 
+          />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-900">Share Chat</h2>
+                <button
+                  onClick={() => setShowShareModal(false)}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+              
+              <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Share2 className="w-5 h-5 text-blue-500" />
+                  <span className="font-medium text-gray-900">Public Link</span>
+                </div>
+                <p className="text-sm text-gray-600 mb-3">
+                  Share this link to let others chat with this AI assistant
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={window.location.href}
+                    readOnly
+                    className="flex-1 px-3 py-2 bg-white rounded-lg border border-gray-300 text-sm"
+                  />
+                  <button
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(window.location.href);
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                      } catch (err) {
+                        console.error('Failed to copy:', err);
+                        // Fallback for older browsers
+                        const input = document.createElement('input');
+                        input.value = window.location.href;
+                        document.body.appendChild(input);
+                        input.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(input);
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                      }
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2"
+                  >
+                    {copied ? (
+                      <>
+                        <CheckCircle className="w-4 h-4" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4" />
+                        Copy
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    if (navigator.share) {
+                      navigator.share({
+                        title: `${chatbotSettings?.display_name || 'AI Assistant'} - Chat`,
+                        text: `Chat with ${chatbotSettings?.display_name || 'AI Assistant'}`,
+                        url: window.location.href,
+                      }).catch(() => {});
+                    }
+                  }}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                >
+                  Share via...
+                </button>
+                <button
+                  onClick={() => setShowShareModal(false)}
+                  className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors text-sm font-medium"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
+

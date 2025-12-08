@@ -3,7 +3,7 @@ import {
   ArrowLeft, MessageCircle, User, TrendingUp, AlertCircle, Calendar, CheckCircle, Mail, Send, Loader2,
   Sparkles, Flame, Thermometer, Snowflake, HelpCircle, Zap, Copy, Check, Link as LinkIcon,
   Phone, Target, Brain, MessageSquare, Clock, Eye, Layers, X, ChevronDown, ChevronUp,
-  UserPlus, BarChart3, Shuffle, RefreshCw, Pause, Play
+  UserPlus, BarChart3, Shuffle, RefreshCw, Pause, Play, MoreVertical, Archive, Ban, Flag
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -62,6 +62,10 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
   const [showConvertProspectModal, setShowConvertProspectModal] = useState(false);
   const [showGenerateAnalysisModal, setShowGenerateAnalysisModal] = useState(false);
   const [showSendToPipelineModal, setShowSendToPipelineModal] = useState(false);
+  const [showSessionMenu, setShowSessionMenu] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [movingToSpam, setMovingToSpam] = useState(false);
+  const [reporting, setReporting] = useState(false);
   const [showSetAppointmentModal, setShowSetAppointmentModal] = useState(false);
   const [generatingAnalysis, setGeneratingAnalysis] = useState(false);
   const [generatingPipelineRec, setGeneratingPipelineRec] = useState(false);
@@ -239,8 +243,8 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
   }
 
   async function handleRegenerateAnalysis() {
-    // Check coin balance (10 coins for analysis)
-    if (coinBalance < 10) {
+    // Check coin balance (3 coins for analysis)
+    if (coinBalance < 3) {
       setShowBuyCoinsModal(true);
       return;
     }
@@ -250,16 +254,16 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
       // Deduct coins
       await supabase
         .from('profiles')
-        .update({ coin_balance: coinBalance - 10 })
+        .update({ coin_balance: coinBalance - 3 })
         .eq('id', user?.id);
-      setCoinBalance(coinBalance - 10);
+      setCoinBalance(coinBalance - 3);
 
       // Regenerate analysis with animation delay for premium feel
       await new Promise(resolve => setTimeout(resolve, 2000));
       await loadAIAnalysis();
       
       alert('✅ Analysis updated successfully!');
-      setShowGenerateAnalysisModal(false);
+      // Modal stays open - user can see updated analysis
     } catch (error) {
       console.error('Error regenerating analysis:', error);
       alert('Failed to regenerate analysis');
@@ -297,33 +301,6 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
     }
   }
 
-  async function handleRegenerateAnalysis() {
-    // Check coin balance (10 coins for analysis)
-    if (coinBalance < 10) {
-      setShowBuyCoinsModal(true);
-      return;
-    }
-
-    setGeneratingAnalysis(true);
-    try {
-      // Deduct coins
-      await supabase
-        .from('profiles')
-        .update({ coin_balance: coinBalance - 10 })
-        .eq('id', user?.id);
-      setCoinBalance(coinBalance - 10);
-
-      // Regenerate analysis
-      await loadAIAnalysis();
-      alert('✅ Analysis updated successfully!');
-      setShowGenerateAnalysisModal(false);
-    } catch (error) {
-      console.error('Error regenerating analysis:', error);
-      alert('Failed to regenerate analysis');
-    } finally {
-      setGeneratingAnalysis(false);
-    }
-  }
 
   async function handleGeneratePipelineRecommendation() {
     setGeneratingPipelineRec(true);
@@ -477,8 +454,8 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
   const handleGenerateMessageScenarios = async () => {
     if (!analysis || !session) return;
 
-    // Check coin balance (5 coins needed - 50% off from 10)
-    if (coinBalance < 5) {
+    // Check coin balance (3 coins needed)
+    if (coinBalance < 3) {
       setShowBuyCoinsModal(true);
       return;
     }
@@ -491,13 +468,13 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
       // Deduct coins
       const { error: deductError } = await supabase
         .from('profiles')
-        .update({ coin_balance: coinBalance - 5 })
+        .update({ coin_balance: coinBalance - 3 })
         .eq('id', user?.id);
 
       if (deductError) throw deductError;
 
       // Update local balance
-      setCoinBalance(coinBalance - 5);
+      setCoinBalance(coinBalance - 3);
 
       // Build context from chat messages
       const chatContext = messages.slice(-5).map(m => 
@@ -570,8 +547,8 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
   const handleGenerateSequence = async () => {
     if (!analysis || !session) return;
 
-    // Check coin balance (13 coins needed - 50% off from 25, rounded up)
-    if (coinBalance < 13) {
+    // Check coin balance (12 coins needed)
+    if (coinBalance < 12) {
       setShowBuyCoinsModal(true);
       return;
     }
@@ -584,13 +561,13 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
       // Deduct coins
       const { error: deductError } = await supabase
         .from('profiles')
-        .update({ coin_balance: coinBalance - 13 })
+        .update({ coin_balance: coinBalance - 12 })
         .eq('id', user?.id);
 
       if (deductError) throw deductError;
 
       // Update local balance
-      setCoinBalance(coinBalance - 13);
+      setCoinBalance(coinBalance - 12);
 
       // Simulate AI generation (replace with real OpenAI call)
       await new Promise(resolve => setTimeout(resolve, 2500));
@@ -699,6 +676,111 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
     }
   };
 
+
+  const handleArchiveSession = async () => {
+    if (!session || !user?.id) return;
+
+    setArchiving(true);
+    try {
+      const { error } = await supabase
+        .from('public_chat_sessions')
+        .update({ 
+          status: 'archived',
+          archived_at: new Date().toISOString(),
+          archived_by: user.id
+        })
+        .eq('id', session.id);
+
+      if (error) throw error;
+
+      alert('✅ Session archived successfully!');
+      if (onBack) {
+        onBack();
+      }
+    } catch (error) {
+      console.error('Error archiving session:', error);
+      alert('Failed to archive session. Please try again.');
+    } finally {
+      setArchiving(false);
+    }
+  };
+
+  const handleMoveToSpam = async () => {
+    if (!session || !user?.id) return;
+
+    const confirmed = window.confirm('Are you sure you want to move this session to spam? This action can be undone later.');
+    if (!confirmed) return;
+
+    setMovingToSpam(true);
+    try {
+      const { error } = await supabase
+        .from('public_chat_sessions')
+        .update({ 
+          status: 'spam',
+          spam_at: new Date().toISOString(),
+          spam_by: user.id
+        })
+        .eq('id', session.id);
+
+      if (error) throw error;
+
+      alert('✅ Session moved to spam successfully!');
+      if (onBack) {
+        onBack();
+      }
+    } catch (error) {
+      console.error('Error moving session to spam:', error);
+      alert('Failed to move session to spam. Please try again.');
+    } finally {
+      setMovingToSpam(false);
+    }
+  };
+
+  const handleReportSession = async () => {
+    if (!session || !user?.id) return;
+
+    const reason = window.prompt('Please provide a reason for reporting this session:');
+    if (!reason || !reason.trim()) return;
+
+    setReporting(true);
+    try {
+      const { error: reportError } = await supabase
+        .from('session_reports')
+        .insert({
+          session_id: session.id,
+          reported_by: user.id,
+          reason: reason.trim(),
+          reported_at: new Date().toISOString(),
+          status: 'pending'
+        });
+
+      if (reportError) {
+        console.warn('session_reports table may not exist, updating session directly:', reportError);
+        const { error: updateError } = await supabase
+          .from('public_chat_sessions')
+          .update({ 
+            status: 'reported',
+            reported_at: new Date().toISOString(),
+            reported_by: user.id,
+            report_reason: reason.trim()
+          })
+          .eq('id', session.id);
+
+        if (updateError) throw updateError;
+      }
+
+      alert('✅ Session reported successfully! Our team will review it shortly.');
+      if (onBack) {
+        onBack();
+      }
+    } catch (error) {
+      console.error('Error reporting session:', error);
+      alert('Failed to report session. Please try again.');
+    } finally {
+      setReporting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -742,12 +824,79 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
             </div>
             
             {/* Compact Action Buttons */}
-            <div className="flex items-center gap-2">
-              {lastAnalyzedAt && (
-                <span className="text-xs text-gray-600">
-                  AI Analyzed Chat last {lastAnalyzedAt}
-                </span>
-              )}
+            <div className="flex items-center gap-2 relative">
+              {/* 3-Dot Menu */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowSessionMenu(!showSessionMenu)}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
+                  type="button"
+                >
+                  <MoreVertical className="w-5 h-5 text-gray-600" />
+                </button>
+                
+                {/* Dropdown Menu */}
+                {showSessionMenu && (
+                  <>
+                    {/* Backdrop to close menu */}
+                    <div
+                      className="fixed inset-0 z-30"
+                      onClick={() => setShowSessionMenu(false)}
+                    />
+                    {/* Menu */}
+                    <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-40 py-1">
+                      <button
+                        onClick={async () => {
+                          setShowSessionMenu(false);
+                          await handleArchiveSession();
+                        }}
+                        disabled={archiving}
+                        className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 transition-colors disabled:opacity-50"
+                        type="button"
+                      >
+                        {archiving ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Archive className="w-4 h-4" />
+                        )}
+                        <span>Add to Archive</span>
+                      </button>
+                      <button
+                        onClick={async () => {
+                          setShowSessionMenu(false);
+                          await handleMoveToSpam();
+                        }}
+                        disabled={movingToSpam}
+                        className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 transition-colors disabled:opacity-50"
+                        type="button"
+                      >
+                        {movingToSpam ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Ban className="w-4 h-4" />
+                        )}
+                        <span>Move to Spam</span>
+                      </button>
+                      <button
+                        onClick={async () => {
+                          setShowSessionMenu(false);
+                          await handleReportSession();
+                        }}
+                        disabled={reporting}
+                        className="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors disabled:opacity-50"
+                        type="button"
+                      >
+                        {reporting ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Flag className="w-4 h-4" />
+                        )}
+                        <span>Report</span>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -864,15 +1013,38 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
                 ))}
               </div>
 
+              {/* Status Notice for Reported Sessions */}
+              {session && session.status === 'reported' && (
+                <div className="border-t border-red-200 pt-4 pb-4 px-3 sm:px-5 flex-shrink-0 bg-red-50">
+                  <div className="flex items-center gap-2 text-red-700">
+                    <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold">Session Reported</p>
+                      <p className="text-xs">This session has been reported. AI chatbot and human replies are disabled. Recover the session to restore functionality.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Status Notice for Spam Sessions */}
+              {session && session.status === 'spam' && (
+                <div className="border-t border-orange-200 pt-2 pb-2 px-3 sm:px-5 flex-shrink-0 bg-orange-50">
+                  <div className="flex items-center gap-2 text-orange-700">
+                    <Ban className="w-4 h-4 flex-shrink-0" />
+                    <p className="text-xs">AI chatbot replies are disabled for this spam session. You can still reply as human.</p>
+                  </div>
+                </div>
+              )}
+
               {/* Human Intervention Input - Facebook Style with Better Spacing - Always Visible */}
-              {session && (session.status === 'active' || session.status === 'human_takeover') && (
+              {session && (session.status === 'active' || session.status === 'human_takeover' || session.status === 'spam') && (
                 <div className="border-t border-gray-200 pt-4 pb-4 px-3 sm:px-5 flex-shrink-0 bg-white" style={{ position: 'relative', zIndex: 1, minHeight: '120px' }}>
                   <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
                     <div className="flex items-center gap-3">
                       <div className="p-2.5 bg-purple-100 rounded-full">
                         <User className="w-5 h-5 text-purple-600" />
                       </div>
-                      <span className="text-base font-bold text-gray-900">Reply as Human</span>
+                      <span className="text-[7px] font-bold text-gray-900">Reply as Human</span>
                     </div>
                     
                     {/* Chatbot Status + Pause/Play Button */}
@@ -1063,10 +1235,16 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
                   <span className="text-xs font-semibold text-gray-600">Phone</span>
                   <span className="text-sm font-bold text-gray-900">{session?.visitor_phone || 'Not provided'}</span>
                 </div>
-                <div className="flex items-center justify-between py-3">
+                <div className="flex items-center justify-between py-3 border-b border-gray-100">
                   <span className="text-xs font-semibold text-gray-600">Channel</span>
                   <span className="text-sm font-bold text-[#1877F2]">🌐 Web</span>
                 </div>
+                {lastAnalyzedAt && (
+                  <div className="flex items-center justify-between py-3">
+                    <span className="text-xs font-semibold text-gray-600">AI Analyzed</span>
+                    <span className="text-xs text-gray-600">last {lastAnalyzedAt}</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1361,13 +1539,10 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
                 </div>
               )}
 
-              {/* Coin Cost (50% off) */}
+              {/* Coin Cost */}
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between">
                 <span className="text-xs font-bold text-blue-800">Cost:</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500 line-through">💎 10 Coins</span>
-                  <span className="text-sm font-bold text-blue-900">💎 5 Coins (50% OFF!)</span>
-                </div>
+                <span className="text-sm font-bold text-blue-900">💎 3 Coins</span>
               </div>
 
               {/* Coin Balance Display */}
@@ -1384,7 +1559,7 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
                   setMessageScenarios([]);
                   setSelectedScenario(null);
                 }}
-                className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-100 transition-colors font-semibold"
+                className="w-[30%] px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-100 transition-colors font-semibold"
               >
                 Cancel
               </button>
@@ -1402,7 +1577,7 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
                   ) : (
                     <>
                       <Sparkles className="w-4 h-4" />
-                      Generate Options
+                      Generate AI Message
                     </>
                   )}
                 </button>
@@ -1601,13 +1776,10 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
                 </div>
               )}
 
-              {/* Coin Cost (50% off) */}
+              {/* Coin Cost */}
               <div className="p-3 bg-pink-50 border border-pink-200 rounded-xl flex items-center justify-between">
                 <span className="text-xs font-bold text-pink-800">Cost:</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500 line-through">💎 25 Coins</span>
-                  <span className="text-sm font-bold text-pink-900">💎 13 Coins (50% OFF!)</span>
-                </div>
+                <span className="text-sm font-bold text-pink-900">💎 12 Coins</span>
               </div>
 
               {/* Coin Balance Display */}
@@ -1624,7 +1796,7 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
                   setSequenceApproaches([]);
                   setSelectedApproach(null);
                 }}
-                className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-100 transition-colors font-semibold"
+                className="w-[30%] px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-100 transition-colors font-semibold"
               >
                 Cancel
               </button>
@@ -1680,8 +1852,12 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
                 AI Analysis
               </h3>
               <button
-                onClick={() => setShowGenerateAnalysisModal(false)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowGenerateAnalysisModal(false);
+                }}
                 className="text-white hover:text-gray-200 transition-colors"
+                type="button"
               >
                 <X className="w-6 h-6" />
               </button>
@@ -1718,7 +1894,7 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
               {/* Cost */}
               <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl flex items-center justify-between">
                 <span className="text-xs font-bold text-purple-800">Cost:</span>
-                <span className="text-sm font-bold text-purple-900">💎 10 Coins</span>
+                <span className="text-sm font-bold text-purple-900">💎 3 Coins</span>
               </div>
 
               {/* Balance */}
@@ -1730,8 +1906,12 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
 
             <div className="sticky bottom-0 bg-gray-50 px-6 py-4 flex gap-3 rounded-b-3xl border-t border-gray-200">
               <button
-                onClick={() => setShowGenerateAnalysisModal(false)}
-                className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-100 transition-colors font-semibold"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowGenerateAnalysisModal(false);
+                }}
+                className="w-[30%] px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-100 transition-colors font-semibold"
+                type="button"
               >
                 Cancel
               </button>
@@ -1840,7 +2020,7 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
             <div className="sticky bottom-0 bg-gray-50 px-6 py-4 flex gap-3 rounded-b-3xl border-t border-gray-200">
               <button
                 onClick={() => setShowSendToPipelineModal(false)}
-                className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-100 transition-colors font-semibold"
+                className="w-[30%] px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-100 transition-colors font-semibold"
               >
                 Cancel
               </button>
@@ -1851,7 +2031,7 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
                   alert(`✅ Lead sent to ${stage.toUpperCase()} pipeline successfully!`);
                   setShowSendToPipelineModal(false);
                 }}
-                className="flex-1 px-6 py-3 bg-orange-600 text-white rounded-xl hover:bg-orange-700 transition-colors font-semibold flex items-center justify-center gap-2"
+                className="w-[70%] px-6 py-3 bg-orange-600 text-white rounded-xl hover:bg-orange-700 transition-colors font-semibold flex items-center justify-center gap-2"
               >
                 <Shuffle className="w-4 h-4" />
                 Send to Pipeline
@@ -1913,7 +2093,7 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
             <div className="sticky bottom-0 bg-gray-50 px-6 py-4 flex gap-3 rounded-b-3xl border-t border-gray-200">
               <button
                 onClick={() => setShowSetAppointmentModal(false)}
-                className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-100 transition-colors font-semibold"
+                className="w-[30%] px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-100 transition-colors font-semibold"
               >
                 Cancel
               </button>
