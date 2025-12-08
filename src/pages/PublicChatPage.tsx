@@ -290,13 +290,23 @@ export default function PublicChatPage({ slug, onNavigate }: PublicChatPageProps
       const subscriptionTier = profile?.subscription_tier?.toLowerCase()?.trim() || 'free';
       const isProUser = subscriptionTier === 'pro';
 
+      // Enhanced logging with explicit values for debugging
+      const rawTier = profile?.subscription_tier;
       console.log('[PublicChat] User tier check:', {
         chatUserId,
+        hasProfile: !!profile,
+        rawTier: rawTier || 'NULL/UNDEFINED',
         subscriptionTier,
-        rawTier: profile?.subscription_tier,
         isProUser,
-        profileEmail: profile?.email
+        profileEmail: profile?.email || 'N/A'
       });
+      
+      // Additional explicit log for debugging
+      console.log('[PublicChat] Tier detection:', `Raw: "${rawTier}" → Normalized: "${subscriptionTier}" → IsPro: ${isProUser}`);
+      
+      if (!profile) {
+        console.error('[PublicChat] ❌ Profile not found for user:', chatUserId);
+      }
       const chatLimit = isProUser ? 300 : 30;
 
       // Count monthly chats
