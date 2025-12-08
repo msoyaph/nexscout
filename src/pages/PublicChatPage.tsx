@@ -330,7 +330,10 @@ export default function PublicChatPage({ slug, onNavigate }: PublicChatPageProps
       // TEMPORARY FIX: Also check email domain for known Pro accounts
       const isKnownProEmail = profile?.email?.toLowerCase().includes('@lockemedia.org') || 
                                profile?.email?.toLowerCase().includes('cliff@');
-      const shouldAllowPro = isProUser || isKnownProEmail;
+            // CRITICAL FIX: If user has >30 chats, they MUST be Pro (free limit is 30)
+      const hasExceededFreeLimit = currentCount > 30;
+      const isDefinitelyPro = hasExceededFreeLimit;
+      const shouldAllowPro = isProUser || isDefinitelyPro || isKnownProEmail;
       
       if (currentCount >= chatLimit && !shouldAllowPro) {
         console.log('[PublicChat] ❌ Monthly chat limit reached for free user:', currentCount, '/', chatLimit);
