@@ -327,13 +327,19 @@ export default function PublicChatPage({ slug, onNavigate }: PublicChatPageProps
       setChatLimit(chatLimit);
       
       // Check if limit is reached - BLOCK non-Pro users, allow Pro users to continue
-      if (currentCount >= chatLimit && !isProUser) {
+      // TEMPORARY FIX: Also check email domain for known Pro accounts
+      const isKnownProEmail = profile?.email?.toLowerCase().includes('@lockemedia.org') || 
+                               profile?.email?.toLowerCase().includes('cliff@');
+      const shouldAllowPro = isProUser || isKnownProEmail;
+      
+      if (currentCount >= chatLimit && !shouldAllowPro) {
         console.log('[PublicChat] ❌ Monthly chat limit reached for free user:', currentCount, '/', chatLimit);
+        console.log('[PublicChat] Debug info:', { isProUser, isKnownProEmail, shouldAllowPro, email: profile?.email });
         setIsLimitReached(true);
         setError(`You have reached your monthly chat limit (${chatLimit}). Upgrade to Pro for 300 chats/month.`);
         setIsLoading(false);
         return;
-      } else if (currentCount >= chatLimit && isProUser) {
+      } else if (currentCount >= chatLimit && shouldAllowPro) {
         // Pro users can continue even if they hit 300 (they can purchase more)
         console.log('[PublicChat] ✅ Pro user at limit:', currentCount, '/', chatLimit, '- allowing continuation');
         setIsLimitReached(true);
