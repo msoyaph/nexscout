@@ -47,32 +47,29 @@ export default function SlideInMenu({ isOpen, onClose, onNavigate }: SlideInMenu
 
   async function loadUserImage() {
     try {
-      // Try uploaded_image_url first, fallback to avatar_url if it doesn't exist
-      const { data, error } = await supabase
+      if (!profile?.id) return;
+      
+      // Try uploaded_image_url first
+      const { data: uploadedData, error: uploadedError } = await supabase
         .from('profiles')
-        .select('uploaded_image_url, avatar_url')
-        .eq('id', profile?.id)
+        .select('uploaded_image_url')
+        .eq('id', profile.id)
         .maybeSingle();
 
-      if (error) {
-        // If column doesn't exist, try avatar_url
-        if (error.code === '42703') {
-          const { data: fallbackData } = await supabase
-            .from('profiles')
-            .select('avatar_url')
-            .eq('id', profile?.id)
-            .maybeSingle();
-          
-          if (fallbackData?.avatar_url) {
-            setUploadedImageUrl(fallbackData.avatar_url);
-          }
-          return;
-        }
-        throw error;
+      if (!uploadedError && uploadedData?.uploaded_image_url) {
+        setUploadedImageUrl(uploadedData.uploaded_image_url);
+        return;
       }
-      
-      if (data) {
-        setUploadedImageUrl(data.uploaded_image_url || data.avatar_url || null);
+
+      // Fallback to avatar_url if uploaded_image_url doesn't exist or is null
+      const { data: avatarData, error: avatarError } = await supabase
+        .from('profiles')
+        .select('avatar_url')
+        .eq('id', profile.id)
+        .maybeSingle();
+
+      if (!avatarError && avatarData?.avatar_url) {
+        setUploadedImageUrl(avatarData.avatar_url);
       }
     } catch (error) {
       console.error('Error loading user image:', error);

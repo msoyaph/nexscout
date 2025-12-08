@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, MessageCircle, Copy, Check, CheckCircle, ExternalLink, Save, Facebook, MessageSquare, Phone, Send, Webhook, Key, Link, AlertCircle, Database, Plus, Sparkles, RefreshCw, Trash2, Power, X, Edit, Lock, Crown } from 'lucide-react';
+import { ArrowLeft, MessageCircle, Copy, Check, CheckCircle, ExternalLink, Save, Facebook, MessageSquare, Phone, Send, Webhook, Key, Link, AlertCircle, Database, Plus, Sparkles, RefreshCw, Trash2, Power, X, Edit, Lock, Crown, Ban, Flag, Archive, RotateCcw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
@@ -11,7 +11,7 @@ interface ChatbotSettingsPageProps {
 export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSettingsPageProps) {
   const { user } = useAuth();
   const isSuperAdmin = user?.email === 'geoffmax22@gmail.com';
-  const [activeTab, setActiveTab] = useState<'settings' | 'training' | 'integrations'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'training' | 'integrations' | 'others'>('settings');
   const [settings, setSettings] = useState<any>(null);
   const [chatSlug, setChatSlug] = useState('');
   const [copied, setCopied] = useState(false);
@@ -60,6 +60,13 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
   const [useCustomInstructions, setUseCustomInstructions] = useState(false);
   const [overrideIntelligence, setOverrideIntelligence] = useState(false);
 
+  // Others Tab - Archive, Spam and Reported Sessions
+  const [archivedSessions, setArchivedSessions] = useState<any[]>([]);
+  const [spamSessions, setSpamSessions] = useState<any[]>([]);
+  const [reportedSessions, setReportedSessions] = useState<any[]>([]);
+  const [loadingOthers, setLoadingOthers] = useState(false);
+  const [recoveringSession, setRecoveringSession] = useState<string | null>(null);
+
   useEffect(() => {
     if (user) {
       loadSettings();
@@ -67,6 +74,9 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
       loadUserTier();
       if (activeTab === 'training') {
         loadTrainingData();
+      if (activeTab === 'others') {
+        loadArchivedSpamAndReportedSessions();
+      }
       }
     }
   }, [user, activeTab]);
@@ -385,6 +395,102 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
     }
   };
 
+  const loadArchivedSpamAndReportedSessions = async () => {
+    if (!user?.id) return;
+    
+    setLoadingOthers(true);
+    try {
+      // Load archived sessions
+      const { data: archivedData, error: archivedError } = await supabase
+        .from('public_chat_sessions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'archived')
+        .order('archived_at', { ascending: false })
+        .limit(100);
+
+      if (archivedError) throw archivedError;
+
+      // Load spam sessions
+      const { data: spamData, error: spamError } = await supabase
+        .from('public_chat_sessions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'spam')
+        .order('spam_at', { ascending: false })
+        .limit(100);
+
+      if (spamError) throw spamError;
+
+      // Load reported sessions
+      const { data: reportedData, error: reportedError } = await supabase
+        .from('public_chat_sessions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'reported')
+        .order('reported_at', { ascending: false })
+        .limit(100);
+
+      if (reportedError) throw reportedError;
+
+      setArchivedSessions(archivedData || []);
+      setSpamSessions(spamData || []);
+      setReportedSessions(reportedData || []);
+    } catch (error) {
+      console.error('Error loading archived/spam/reported sessions:', error);
+      alert('Failed to load spam and reported sessions');
+    } finally {
+      setLoadingOthers(false);
+    }
+  };
+
+  const handleRecoverSession = async (sessionId: string, currentStatus: string) => {
+    if (!user?.id) return;
+
+    const confirmed = window.confirm(
+      `Are you sure you want to recover this session? This will restore it to active status and allow AI chatbot to reply again.`
+    );
+    if (!confirmed) return;
+
+    setRecoveringSession(sessionId);
+    try {
+      const updateData: any = {
+        status: 'active',
+        recovered_at: new Date().toISOString(),
+        recovered_by: user.id
+      };
+
+      // Clear status-specific fields
+      if (currentStatus === 'archived') {
+        updateData.archived_at = null;
+        updateData.archived_by = null;
+      } else if (currentStatus === 'spam') {
+        updateData.spam_at = null;
+        updateData.spam_by = null;
+      } else if (currentStatus === 'reported') {
+        updateData.reported_at = null;
+        updateData.reported_by = null;
+        updateData.report_reason = null;
+      }
+
+      const { error } = await supabase
+        .from('public_chat_sessions')
+        .update(updateData)
+        .eq('id', sessionId);
+
+      if (error) throw error;
+
+      alert('✅ Session recovered successfully! AI chatbot will now reply to this session.');
+      loadArchivedSpamAndReportedSessions();
+    } catch (error) {
+      console.error('Error recovering session:', error);
+      alert('Failed to recover session. Please try again.');
+    } finally {
+      setRecoveringSession(null);
+    }
+  };
+
+
   const manualSyncCompanyData = async () => {
     if (!user) return;
 
@@ -612,6 +718,17 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
               }`}
             >
               Integrations
+            </button>
+            <button
+              onClick={() => setActiveTab('others')}
+              className={`px-3 py-2 font-semibold text-sm sm:text-base whitespace-nowrap border-b-2 transition-colors flex items-center gap-1.5 ${
+                activeTab === 'others'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+              <span>Others</span>
             </button>
           </div>
         </div>

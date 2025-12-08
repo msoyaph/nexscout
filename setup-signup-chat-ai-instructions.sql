@@ -90,3 +90,6 @@ You:
   RAISE NOTICE '✅ Chatbot settings configured for SuperAdmin: %', superadmin_user_id;
 END $$;
 
+
+
+

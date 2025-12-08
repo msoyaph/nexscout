@@ -14,3 +14,6 @@ COMMENT ON COLUMN profiles.welcome_bonus_claimed IS 'Tracks if user has claimed 
 -- Optional: Mark existing users as having claimed (if you don't want to show to existing users)
 -- UPDATE profiles SET welcome_bonus_claimed = TRUE WHERE onboarding_completed = TRUE;
 
+
+
+

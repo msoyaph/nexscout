@@ -100,3 +100,6 @@ After redeploying:
 
 **The code fix provides a safety net, but you should still update the environment variable in Vercel to use HTTPS!** 🚀
 
+
+
+

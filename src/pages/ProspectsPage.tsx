@@ -67,7 +67,7 @@ export default function ProspectsPage({
         full_name: p.full_name,
         score: p.metadata?.scout_score || 0,
         tags: p.metadata?.tags || [],
-        analysis: p.metadata?.notes || p.bio_text || 'No analysis available',
+        analysis: p.metadata?.notes || p.bio_text || null,
         lastActive: getTimeAgo(p.last_seen_activity_at),
         temperature: p.metadata?.bucket || p.metadata?.temperature || 'warm',
         platform: p.platform,
@@ -83,7 +83,7 @@ export default function ProspectsPage({
   }
 
   function getTimeAgo(date: string) {
-    if (!date) return 'New';
+    if (!date) return null;
     const now = new Date();
     const then = new Date(date);
     const diffMs = now.getTime() - then.getTime();
@@ -330,16 +330,6 @@ export default function ProspectsPage({
                       </p>
                     )}
 
-                    {/* Meta Info */}
-                    <div className="flex items-center gap-3 mt-3 text-xs text-gray-500">
-                      <span className="flex items-center gap-1">
-                        <Calendar className="w-3.5 h-3.5" />
-                        {prospect.lastActive}
-                      </span>
-                      {prospect.platform && (
-                        <span className="capitalize">· {prospect.platform}</span>
-                      )}
-                    </div>
                   </div>
                 </div>
               </div>

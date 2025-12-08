@@ -58,3 +58,6 @@ console.log('VITE_SUPABASE_URL:', import.meta.env.VITE_SUPABASE_URL);
 
 **Status:** Code is fixed, but production environment variable needs updating!
 
+
+
+

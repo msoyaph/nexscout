@@ -36,3 +36,6 @@ echo "✅ Git configuration complete!"
 echo ""
 echo "You can now commit your changes."
 
+
+
+

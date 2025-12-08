@@ -730,3 +730,6 @@ Every conversation should move toward at least one goal.
 
 Use this as your complete guide for all NexScout AI interactions.
 
+
+
+

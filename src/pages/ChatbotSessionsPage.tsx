@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, MessageCircle, Clock, User, CheckCircle, Settings, Eye, Flame, Thermometer, Snowflake, HelpCircle, Facebook, Mail, MessageSquare as SMS, Phone, Play, Pause, Search, X, RefreshCw, Crown, AlertCircle, Zap, CreditCard } from 'lucide-react';
+
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import { getNextBlockPrice, formatPricePHP } from '../lib/payAsYouGrowPricing';
 import { getAvatarClasses, getAvatarContent } from '../utils/avatarUtils';
 
 interface ChatSession {
@@ -62,7 +64,21 @@ export default function ChatbotSessionsPage({ onBack, onNavigate }: ChatbotSessi
   const chatRemaining = Math.max(0, chatLimit - chatUsage);
   const usagePercentage = Math.min(100, (chatUsage / chatLimit) * 100);
   const isNearLimit = usagePercentage >= 80;
+  const isVeryNearLimit = usagePercentage >= 90;
+  const isCriticalLimit = usagePercentage >= 95;
   const isOverLimit = chatUsage >= chatLimit;
+  
+  // Pay-as-you-grow calculations for Pro users
+  const nextBlockInfo = isProUser ? getNextBlockPrice(chatUsage) : null;
+  const chatsUntilNextBlock = (() => {
+    if (isProUser && chatUsage < chatLimit) {
+      return chatLimit - chatUsage;
+    }
+    if (isProUser && nextBlockInfo) {
+      return nextBlockInfo.nextBlockRange.start - chatUsage;
+    }
+    return null;
+  })();
 
   useEffect(() => {
     if (user) {

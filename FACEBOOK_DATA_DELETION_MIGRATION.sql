@@ -52,3 +52,6 @@ CREATE TRIGGER update_data_deletion_requests_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION update_data_deletion_requests_updated_at();
 
+
+
+

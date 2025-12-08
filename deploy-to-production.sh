@@ -58,3 +58,6 @@ echo "3. Test production URL: https://nexscout.co/chat/[your-chatbot-id]"
 echo ""
 echo "🎉 Done!"
 
+
+
+

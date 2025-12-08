@@ -105,3 +105,6 @@ Then update the code to use that chatbot_id instead of 'signup-page-chat'.
 
 **Status:** Ready to fix - just run the SQL above!
 
+
+
+

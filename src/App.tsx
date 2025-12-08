@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { EnergyProvider } from './contexts/EnergyContext';
 import { NudgeProvider } from './contexts/NudgeContext';
@@ -84,6 +84,48 @@ interface OnboardingData {
   role: string;
   goals: string[];
   connectedPlatforms: string[];
+}
+
+// Error Boundary Component
+class ErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('[ErrorBoundary] Caught error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-white flex items-center justify-center p-6">
+          <div className="text-center max-w-md">
+            <h1 className="text-2xl font-bold text-red-600 mb-4">Something went wrong</h1>
+            <p className="text-gray-600 mb-4">
+              {this.state.error?.message || 'An unexpected error occurred'}
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Reload Page
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
 }
 
 // Main App component - checks for public routes FIRST
@@ -178,13 +220,15 @@ function App() {
 
   // For all other routes, use the normal authenticated app
   return (
-    <AuthProvider>
-      <EnergyProvider>
-        <NudgeProvider>
-          <AppContent />
-        </NudgeProvider>
-      </EnergyProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <EnergyProvider>
+          <NudgeProvider>
+            <AppContent />
+          </NudgeProvider>
+        </EnergyProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 
@@ -368,7 +412,7 @@ function AppContent() {
       case 'leads-dashboard':
         return <LeadsDashboardPage />;
       case 'calendar':
-        return <CalendarPage onNavigate={handleNavigate} />;
+        return <CalendarPage onBack={() => handleNavigate('home')} onNavigate={handleNavigate} />;
       case 'todos':
         return <TodosPage onNavigate={handleNavigate} />;
       case 'reminders':
@@ -420,9 +464,33 @@ function AppContent() {
     }
   };
 
+  // Wrap renderPage in error boundary
+  let pageContent;
+  try {
+    pageContent = renderPage();
+  } catch (error) {
+    console.error('[App] Error rendering page:', error);
+    pageContent = (
+      <div className="min-h-screen bg-white flex items-center justify-center p-6">
+        <div className="text-center max-w-md">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">Something went wrong</h1>
+          <p className="text-gray-600 mb-4">
+            {error instanceof Error ? error.message : 'An unexpected error occurred'}
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Reload Page
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
-      {renderPage()}
+      {pageContent}
       <NudgeRenderer />
       <AutomationToastContainer />
       

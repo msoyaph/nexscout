@@ -73,3 +73,6 @@ Add to `wrangler.toml` or use Cloudflare Pages Functions.
 
 **After pushing vercel.json, the 404 error should be fixed!** 🚀
 
+
+
+

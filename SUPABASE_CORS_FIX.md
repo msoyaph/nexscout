@@ -109,3 +109,6 @@ If you're still seeing CORS errors after configuring Auth URLs:
 
 **The Auth URL Configuration is the main way to fix CORS in Supabase!** 🚀
 
+
+
+
