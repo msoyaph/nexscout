@@ -1282,7 +1282,9 @@ export default function HomePage({
                       const isProUser = profile?.subscription_tier === 'pro' || isSuperAdmin;
                       if (isProUser) {
                         const fbAppId = import.meta.env.VITE_FACEBOOK_APP_ID || 'YOUR_FB_APP_ID';
-                        const redirectUri = `${window.location.origin}/api/facebook/callback`;
+                        // Use Edge Function URL as redirect URI (not frontend route)
+                        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+                        const redirectUri = `${supabaseUrl}/functions/v1/facebook-oauth-callback`;
                         const scopes = 'pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement';
                         const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes}&state=${user?.id}`;
                         window.location.href = authUrl;
