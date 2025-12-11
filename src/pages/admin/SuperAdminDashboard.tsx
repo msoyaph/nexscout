@@ -11,6 +11,7 @@ import SubscriptionManagement from './SubscriptionManagement';
 import FinancialDashboard from './FinancialDashboard';
 import AIAnalytics from './AIAnalytics';
 import CoinMissionAnalytics from './CoinMissionAnalytics';
+import CoinTransactionAuditPage from '../CoinTransactionAuditPage';
 import SystemHealth from './SystemHealth';
 import AnalyticsIntelligenceDashboard from './AnalyticsIntelligenceDashboard';
 import DataFeederPage from './DataFeederPage';
@@ -36,6 +37,7 @@ export default function SuperAdminDashboard({ onNavigateBack, onNavigate }: Supe
     { id: 'organizations', label: 'Organizations', icon: Building2 },
     { id: 'subscriptions', label: 'Subscriptions', icon: CreditCard },
     { id: 'coins', label: 'Coins & Missions', icon: Wallet },
+    { id: 'coin-audit', label: 'Coin Transaction Audit', icon: Wallet },
     { id: 'ai', label: 'AI Engine', icon: Brain },
     { id: 'financial', label: 'Financial', icon: DollarSign },
     { id: 'marketplace', label: 'Add-on Marketplace', icon: ShoppingBag },

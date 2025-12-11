@@ -494,19 +494,36 @@ export default function AmbassadorDashboard({ onBack, onNavigate }: AmbassadorDa
 
   const isAmbassador = stats.tier === 'ambassador';
 
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+    } else {
+      window.history.back();
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F0F2F5]">
       {/* Header - Facebook Style */}
       <div className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                {isAmbassador ? 'Ambassador Dashboard' : 'Referral Boss Dashboard'}
-              </h1>
-              <p className="text-sm text-gray-600">
-                {isAmbassador ? 'Earn 50% + 15% recurring PHP commissions' : 'Earn coins & energy for referrals'}
-              </p>
+            <div className="flex items-center gap-3 flex-1">
+              <button
+                onClick={handleBack}
+                className="size-10 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors flex-shrink-0"
+                aria-label="Go back"
+              >
+                <ArrowLeft className="size-5 text-gray-700" />
+              </button>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  {isAmbassador ? 'Ambassador Dashboard' : 'Referral Boss Dashboard'}
+                </h1>
+                <p className="text-sm text-gray-600">
+                  {isAmbassador ? 'Earn 50% + 15% recurring PHP commissions' : 'Earn coins & energy for referrals'}
+                </p>
+              </div>
             </div>
             {isAmbassador && (
               <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg text-white">

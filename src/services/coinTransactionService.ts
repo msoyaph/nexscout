@@ -234,13 +234,26 @@ export const coinTransactionService = {
 
     if (updateError) throw updateError;
 
+    // Build enhanced description if metadata is provided
+    let enhancedDescription = description;
+    if (metadata) {
+      const metadataStr = Object.entries(metadata)
+        .filter(([_, v]) => v !== null && v !== undefined)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join(', ');
+      if (metadataStr) {
+        enhancedDescription = `${description} (${metadataStr})`;
+      }
+    }
+
     const { error: insertError } = await supabase.from('coin_transactions').insert({
       user_id: userId,
       amount: -amount,
       transaction_type: 'spend',
-      description,
+      description: enhancedDescription,
       balance_after: newBalance,
-      metadata,
+      // Note: metadata column doesn't exist in coin_transactions table
+      // Metadata is included in description instead
     });
 
     if (insertError) throw insertError;

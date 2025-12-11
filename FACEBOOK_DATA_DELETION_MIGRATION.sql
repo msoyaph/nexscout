@@ -26,6 +26,10 @@ CREATE INDEX IF NOT EXISTS idx_data_deletion_requests_status ON data_deletion_re
 -- Enable Row Level Security
 ALTER TABLE data_deletion_requests ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist (for idempotent migration)
+DROP POLICY IF EXISTS "Users can view own deletion requests" ON data_deletion_requests;
+DROP POLICY IF EXISTS "Service role full access" ON data_deletion_requests;
+
 -- Policy: Users can view their own deletion requests
 CREATE POLICY "Users can view own deletion requests"
   ON data_deletion_requests
@@ -46,6 +50,9 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Drop trigger if it exists (for idempotent migration)
+DROP TRIGGER IF EXISTS update_data_deletion_requests_updated_at ON data_deletion_requests;
 
 CREATE TRIGGER update_data_deletion_requests_updated_at
   BEFORE UPDATE ON data_deletion_requests

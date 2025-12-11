@@ -88,7 +88,7 @@ class AIEnrichmentEngine {
 
     // Extract sentences with value indicators
     const sentences = text.split(/[.!?]\s+/);
-    const valueKeywords = ['benefit', 'advantage', 'unique', 'exclusive', 'proven', 'guarantee', 'free', 'bonus'];
+    const valueKeywords = ['benefit', 'advantage', 'unique', 'exclusive', 'proven', 'testimonials', 'results', 'free', 'bonus'];
 
     for (const sentence of sentences) {
       if (valueKeywords.some(kw => sentence.toLowerCase().includes(kw)) && sentence.length < 150) {
@@ -113,7 +113,7 @@ class AIEnrichmentEngine {
       'How much time do I need to invest?',
       'Can I really make money with this?',
       'What if I don\'t have sales experience?',
-      'Is there a money-back guarantee?',
+      'What is the refund policy?',
       'What kind of training do you provide?',
       'How long until I see results?',
       'Do I need to buy inventory?',

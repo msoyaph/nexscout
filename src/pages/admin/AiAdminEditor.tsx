@@ -3,6 +3,7 @@ import { useUser } from '../../hooks/useUser';
 import { loadWorkspaceConfig, saveWorkspaceConfig } from '../../services/workspaceConfig.service';
 import { WorkspaceConfig } from '../../types/WorkspaceConfig';
 import { Building2, Package, MessageSquare, Workflow, Brain, FileText, Presentation, Mail } from 'lucide-react';
+import AiSystemInstructionsEditor from '../../components/editor/AiSystemInstructionsEditor';
 
 type TabKey =
   | 'company'
@@ -798,19 +799,12 @@ function CustomInstructionsEditor({ value, onChange }: CustomInstructionsEditorP
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Global Instructions
-        </label>
-        <textarea
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg min-h-[150px] font-mono text-sm"
+        <AiSystemInstructionsEditor
           value={value.globalInstructions || ''}
-          onChange={(e) => update('globalInstructions', e.target.value)}
-          placeholder="Enter special instructions the AI must always follow...
-
-Example:
-- Always mention our 30-day money-back guarantee
-- Never recommend competitor products
-- Always ask for permission before scheduling calls"
+          onChange={(html) => update('globalInstructions', html)}
+          label="Global Instructions"
+          helperText="Enter special instructions the AI must always follow. Example: Never recommend competitor products, Always ask for permission before scheduling calls"
+          placeholder="Enter special instructions the AI must always follow..."
         />
       </div>
 

@@ -167,6 +167,20 @@ class AIInstructionsService {
     // Add text instructions
     parts.push(instructions.customInstructions || instructions.richContent.text);
 
+    // Add products section (NEW - for products with description and link)
+    if ((instructions.richContent as any).products && (instructions.richContent as any).products.length > 0) {
+      parts.push('\n\n========================================');
+      parts.push('PRODUCTS & PRODUCT LINKS');
+      parts.push('========================================\n');
+      parts.push('IMPORTANT: When visitors ask about products, share the product information and link them to the product URL.\n');
+
+      (instructions.richContent as any).products.forEach((product: any, idx: number) => {
+        parts.push(`${idx + 1}. PRODUCT: ${product.name || 'Unnamed Product'}`);
+        if (product.description) parts.push(`   Description: ${product.description}`);
+        parts.push(`   Link: ${product.url || product.productLink || 'No link available'}`);
+      });
+    }
+
     // Add images section
     if (instructions.richContent.images && instructions.richContent.images.length > 0) {
       parts.push('\n\n========================================');
@@ -185,6 +199,7 @@ class AIInstructionsService {
       parts.push('\n\n========================================');
       parts.push('DOWNLOADABLE FILES & DOCUMENTS');
       parts.push('========================================\n');
+      parts.push('IMPORTANT: When visitors ask for brochures, catalogs, or company files, share the file link from below.\n');
 
       instructions.richContent.files.forEach((file, idx) => {
         parts.push(`${idx + 1}. ${file.type.toUpperCase()}: ${file.name}`);

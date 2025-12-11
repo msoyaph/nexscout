@@ -143,8 +143,8 @@ export const FEATURE_ACCESS_RULES: Record<SubscriptionTier, FeatureAccess> = {
       surge_pricing: false,
     },
     coins: {
-      weekly_allocation: 35,
-      daily_bonus: 5,
+      weekly_allocation: 14, // 2 coins/day × 7 days
+      daily_bonus: 2, // Updated: 2 coins per day for Free tier
       ad_rewards: true,
     },
     analytics: {
@@ -220,7 +220,7 @@ export const FEATURE_ACCESS_RULES: Record<SubscriptionTier, FeatureAccess> = {
       surge_pricing: true,
     },
     coins: {
-      weekly_allocation: 500,
+      weekly_allocation: 100, // Updated: 100 coins per week for Pro tier
       daily_bonus: 0,
       ad_rewards: false,
     },
@@ -309,7 +309,12 @@ export function getCoinConfig(tier: SubscriptionTier) {
 }
 
 // Helper to normalize old tier names to new tier structure
-export function normalizeTier(tier: string): SubscriptionTier {
+export function normalizeTier(tier: string, userEmail?: string): SubscriptionTier {
+  // SuperAdmin bypass: Always return 'pro' for SuperAdmin regardless of database value
+  if (userEmail === 'geoffmax22@gmail.com') {
+    return 'pro';
+  }
+
   const lowerTier = tier.toLowerCase();
 
   // Map old tiers to new tiers

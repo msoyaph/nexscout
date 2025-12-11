@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { PHILIPPINE_MLM_KEYWORDS, OBJECTION_KEYWORDS } from '../config/scout/mlmKeywords';
 
 export interface FeatureVector {
   engagement_score: number;
@@ -20,6 +21,12 @@ export interface WeightVector {
   relationship_score: number;
 }
 
+export interface ObjectionSignals {
+  hasBudgetObjection: boolean;
+  hasTimingObjection: boolean;
+  hasSpouseObjection: boolean;
+}
+
 export interface ScoutScoreResult {
   score: number;
   bucket: 'hot' | 'warm' | 'cold';
@@ -28,6 +35,12 @@ export interface ScoutScoreResult {
   top_features: Array<{ feature: string; contribution: number; value: number }>;
   feature_vector: FeatureVector;
   weight_vector: WeightVector;
+  // New v2 extended fields
+  intentSignal?: string | null;
+  conversionLikelihood?: number | null;
+  recommendedCTA?: string | null;
+  objectionSignals?: ObjectionSignals;
+  lastInteractionDaysAgo?: number;
 }
 
 const DEFAULT_WEIGHTS: WeightVector = {
@@ -40,28 +53,35 @@ const DEFAULT_WEIGHTS: WeightVector = {
   relationship_score: 0.10,
 };
 
-const PHILIPPINE_MLM_KEYWORDS = {
-  business: ['negosyo', 'business', 'sideline', 'extra income', 'kita', 'tubo', 'profit', 'entrepreneur'],
-  finance: ['pera', 'money', 'income', 'sahod', 'salary', 'savings', 'ipon', 'utang', 'debt', 'financial'],
-  career: ['trabaho', 'work', 'job', 'career', 'promotion', 'boss', 'office', 'company'],
-  health: ['health', 'kalusugan', 'wellness', 'fit', 'sakit', 'hospital', 'insurance', 'protect'],
-  family: ['pamilya', 'family', 'anak', 'children', 'baby', 'asawa', 'spouse', 'kabuhayan'],
-  freedom: ['freedom', 'kalayaan', 'time', 'oras', 'flexible', 'pahinga', 'travel', 'bakasyon'],
-  growth: ['goals', 'pangarap', 'dream', 'improve', 'progress', 'success', 'tagumpay'],
-};
-
 class ScoutScoringV2Service {
-  async calculateScoutScore(prospectId: string, userId: string): Promise<ScoutScoreResult> {
+  async calculateScoutScore(prospectId: string, userId: string, textContent?: string): Promise<ScoutScoreResult> {
     const featureVector = await this.extractFeatures(prospectId, userId);
     const weightVector = await this.getUserWeights(userId);
 
+    // Detect objections from text content
+    const objectionSignals = textContent 
+      ? this.detectObjections(textContent)
+      : { hasBudgetObjection: false, hasTimingObjection: false, hasSpouseObjection: false };
+
+    // Get last interaction time for time-decay
+    const lastInteractionDaysAgo = await this.getLastInteractionDaysAgo(prospectId, userId);
+
+    // Apply time-decay penalty (simple weight reduction for old interactions)
+    const decayPenalty = this.calculateTimeDecayPenalty(lastInteractionDaysAgo);
     const rawScore = this.computeWeightedScore(featureVector, weightVector);
-    const normalizedScore = this.normalizeScore(rawScore);
+    const scoreWithDecay = rawScore * (1 - decayPenalty);
+
+    const normalizedScore = this.normalizeScore(scoreWithDecay);
 
     const bucket = this.classifyBucket(normalizedScore);
     const confidence = this.calculateConfidence(featureVector);
     const topFeatures = this.identifyTopFeatures(featureVector, weightVector);
     const explanationTags = this.generateExplanationTags(featureVector, topFeatures);
+
+    // Generate extended output fields
+    const intentSignal = this.generateIntentSignal(featureVector, objectionSignals);
+    const conversionLikelihood = this.calculateConversionLikelihood(normalizedScore, objectionSignals);
+    const recommendedCTA = this.generateRecommendedCTA(bucket, objectionSignals);
 
     await this.saveFeatureVector(prospectId, userId, featureVector);
     await this.saveScore(prospectId, userId, {
@@ -82,7 +102,101 @@ class ScoutScoringV2Service {
       top_features: topFeatures,
       feature_vector: featureVector,
       weight_vector: weightVector,
+      intentSignal,
+      conversionLikelihood,
+      recommendedCTA,
+      objectionSignals,
+      lastInteractionDaysAgo,
     };
+  }
+
+  private detectObjections(text: string): ObjectionSignals {
+    const lowerText = text.toLowerCase();
+    
+    const hasBudgetObjection = OBJECTION_KEYWORDS.budget.some(keyword => 
+      lowerText.includes(keyword.toLowerCase())
+    );
+    
+    const hasTimingObjection = OBJECTION_KEYWORDS.timing.some(keyword => 
+      lowerText.includes(keyword.toLowerCase())
+    );
+    
+    const hasSpouseObjection = OBJECTION_KEYWORDS.spouse.some(keyword => 
+      lowerText.includes(keyword.toLowerCase())
+    );
+
+    return {
+      hasBudgetObjection,
+      hasTimingObjection,
+      hasSpouseObjection,
+    };
+  }
+
+  private async getLastInteractionDaysAgo(prospectId: string, userId: string): Promise<number> {
+    try {
+      const { data: prospect } = await supabase
+        .from('prospects')
+        .select('updated_at, prospect_profiles(last_event_at)')
+        .eq('id', prospectId)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (!prospect) return 999;
+
+      const lastEventAt = prospect.prospect_profiles?.[0]?.last_event_at || prospect.updated_at;
+      if (!lastEventAt) return 999;
+
+      const daysSince = Math.floor(
+        (Date.now() - new Date(lastEventAt).getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      return daysSince;
+    } catch {
+      return 999;
+    }
+  }
+
+  private calculateTimeDecayPenalty(daysAgo: number): number {
+    // Light decay: 5% after 30 days, 10% after 60 days, max 20% after 90 days
+    if (daysAgo <= 30) return 0;
+    if (daysAgo <= 60) return 0.05;
+    if (daysAgo <= 90) return 0.10;
+    return Math.min(0.20, 0.10 + (daysAgo - 90) * 0.001);
+  }
+
+  private generateIntentSignal(features: FeatureVector, objections: ObjectionSignals): string | null {
+    if (objections.hasBudgetObjection) return 'budget_concern';
+    if (objections.hasTimingObjection) return 'timing_objection';
+    if (objections.hasSpouseObjection) return 'spouse_approval_needed';
+    if (features.business_interest_score >= 70) return 'high_business_interest';
+    if (features.pain_point_score >= 70) return 'high_pain_awareness';
+    if (features.leadership_score >= 70) return 'leadership_potential';
+    return 'general_interest';
+  }
+
+  private calculateConversionLikelihood(score: number, objections: ObjectionSignals): number {
+    // Base likelihood from score
+    let likelihood = score;
+    
+    // Adjust for objections
+    if (objections.hasBudgetObjection) likelihood -= 15;
+    if (objections.hasTimingObjection) likelihood -= 10;
+    if (objections.hasSpouseObjection) likelihood -= 20;
+
+    return Math.max(0, Math.min(100, Math.round(likelihood)));
+  }
+
+  private generateRecommendedCTA(
+    bucket: 'hot' | 'warm' | 'cold',
+    objections: ObjectionSignals
+  ): string | null {
+    if (objections.hasBudgetObjection) return 'address_price_concerns';
+    if (objections.hasTimingObjection) return 'schedule_follow_up';
+    if (objections.hasSpouseObjection) return 'provide_spouse_info_packet';
+    
+    if (bucket === 'hot') return 'direct_close_offer';
+    if (bucket === 'warm') return 'nurture_sequence';
+    return 'build_rapport';
   }
 
   private async extractFeatures(prospectId: string, userId: string): Promise<FeatureVector> {

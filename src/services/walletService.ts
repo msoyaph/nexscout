@@ -227,7 +227,16 @@ export const walletService = {
     return data || [];
   },
 
-  async awardDailyBonus(userId: string): Promise<number> {
+  async awardDailyBonus(userId: string, tier?: string): Promise<number> {
+    // Use new subscription coin service for Free tier (2 coins/day)
+    // This ensures correct amount and proper tracking
+    if (tier === 'free' || tier === 'Free') {
+      const { subscriptionCoinService } = await import('./subscriptionCoinService');
+      const result = await subscriptionCoinService.awardDailyCoins(userId, tier);
+      return result.awarded || 0;
+    }
+
+    // Fallback to database RPC for other tiers or if tier not specified
     const { data, error } = await supabase.rpc('award_daily_bonus', {
       p_user_id: userId,
     });

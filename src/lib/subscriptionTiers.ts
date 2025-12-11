@@ -98,7 +98,7 @@ export const TIER_PRICING: Record<SubscriptionTier, TierPricing> = {
     monthly: 0,
     annual: 0,
     currency: '₱',
-    weeklyCoins: 35,
+    weeklyCoins: 14, // 2 coins/day × 7 days = 14 coins/week
     displayName: 'Free',
     badge: 'Free Forever',
     color: '#6B7280',
@@ -109,7 +109,7 @@ export const TIER_PRICING: Record<SubscriptionTier, TierPricing> = {
     monthly: 1299,
     annual: 12990,
     currency: '₱',
-    weeklyCoins: 500,
+    weeklyCoins: 100, // Updated: 100 coins per week (starts after subscription payment)
     displayName: 'Pro – AI Power Closer',
     badge: 'Best Value',
     color: '#9333EA',
@@ -142,13 +142,13 @@ export const COIN_COSTS = {
   UNLOCK_PRO_TEMPLATE: 20
 };
 
-export const getTierLimits = (tier: string): TierLimits => {
-  const normalizedTier = normalizeTier(tier);
+export const getTierLimits = (tier: string, userEmail?: string): TierLimits => {
+  const normalizedTier = normalizeTier(tier, userEmail);
   return TIER_LIMITS[normalizedTier] || TIER_LIMITS[SUBSCRIPTION_TIERS.FREE];
 };
 
-export const getTierPricing = (tier: string): TierPricing => {
-  const normalizedTier = normalizeTier(tier);
+export const getTierPricing = (tier: string, userEmail?: string): TierPricing => {
+  const normalizedTier = normalizeTier(tier, userEmail);
   return TIER_PRICING[normalizedTier] || TIER_PRICING[SUBSCRIPTION_TIERS.FREE];
 };
 
@@ -168,7 +168,12 @@ export const hasReachedLimit = (
   return currentUsage >= (limit as number);
 };
 
-export const normalizeTier = (tier: string): SubscriptionTier => {
+export const normalizeTier = (tier: string, userEmail?: string): SubscriptionTier => {
+  // SuperAdmin bypass: Always return 'pro' for SuperAdmin regardless of database value
+  if (userEmail === 'geoffmax22@gmail.com') {
+    return 'pro';
+  }
+
   const lowerTier = tier.toLowerCase();
 
   // Map old tiers to new tiers

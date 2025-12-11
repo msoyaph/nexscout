@@ -138,7 +138,8 @@ export default function SlideInMenu({ isOpen, onClose, onNavigate }: SlideInMenu
       label: 'AI Sales Assistant', 
       page: 'ai-chatbot',
       locked: !isSuperAdmin,
-      lockedText: 'Coming Soon'
+      lockedText: 'Coming Soon',
+      hidden: true // Hidden from menu
     },
     { 
       icon: Package, 
@@ -158,7 +159,8 @@ export default function SlideInMenu({ isOpen, onClose, onNavigate }: SlideInMenu
       label: 'AI Pitch Decks', 
       page: 'pitch-decks',
       locked: !isSuperAdmin,
-      lockedText: 'Coming Soon'
+      lockedText: 'Coming Soon',
+      hidden: true // Hidden from menu
     },
     { 
       icon: MessageSquare, 
@@ -307,30 +309,9 @@ export default function SlideInMenu({ isOpen, onClose, onNavigate }: SlideInMenu
           </div>
 
           <div className="p-4">
-            <div className="mb-4">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2">AI Sales Assistant</h3>
-              <div className="space-y-1">
-                {chatbotItems.map((item) => (
-                  <button
-                    key={item.page}
-                    onClick={() => handleMenuClick(item.page)}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-blue-50 transition-colors text-left group"
-                  >
-                    <div className="size-9 rounded-full bg-blue-100 flex items-center justify-center group-hover:bg-blue-200 transition-colors">
-                      <item.icon className="size-4 text-blue-600 transition-colors" />
-                    </div>
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-blue-600 transition-colors block">
-                        {item.label}
-                      </span>
-                      <span className="text-xs text-gray-500">{item.description}</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="border-t border-gray-200 pt-4 mt-4">
+            {/* AI Sales Assistant section hidden */}
+            
+            <div className="border-t border-gray-200 pt-4">
               <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2">Main Menu</h3>
               <div className="space-y-1">
                 {menuItems

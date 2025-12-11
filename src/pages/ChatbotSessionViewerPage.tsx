@@ -3,7 +3,7 @@ import {
   ArrowLeft, MessageCircle, User, TrendingUp, AlertCircle, Calendar, CheckCircle, Mail, Send, Loader2,
   Sparkles, Flame, Thermometer, Snowflake, HelpCircle, Zap, Copy, Check, Link as LinkIcon,
   Phone, Target, Brain, MessageSquare, Clock, Eye, Layers, X, ChevronDown, ChevronUp,
-  UserPlus, BarChart3, Shuffle, RefreshCw, Pause, Play, MoreVertical, Archive, Ban, Flag
+  UserPlus, BarChart3, Shuffle, RefreshCw, Pause, Play, MoreVertical, Archive, Ban, Flag, Edit2, FileText, Globe
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -11,6 +11,7 @@ import { getAvatarClasses, getAvatarContent } from '../utils/avatarUtils';
 import { sessionAnalysisService } from '../services/chatbot/sessionAnalysisService';
 import { calendarService } from '../services/calendar/calendarService';
 import type { SessionAnalysis, ConversionData, AIRecommendation } from '../services/chatbot/sessionAnalysisService';
+import ManageProspectModal from '../components/ManageProspectModal';
 
 interface ChatbotSessionViewerPageProps {
   sessionId?: string;
@@ -73,6 +74,18 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
   const [selectedPipelineStage, setSelectedPipelineStage] = useState<string>('engage');
   const [aiChatbotPaused, setAiChatbotPaused] = useState(false);
   const [togglingAI, setTogglingAI] = useState(false);
+  
+  // Manage Prospect Modal
+  const [showManageProspectModal, setShowManageProspectModal] = useState(false);
+  const [prospectForModal, setProspectForModal] = useState<any>(null);
+  
+  // Edit Visitor Info state
+  const [isEditingVisitorInfo, setIsEditingVisitorInfo] = useState(false);
+  const [editVisitorName, setEditVisitorName] = useState('');
+  const [editVisitorEmail, setEditVisitorEmail] = useState('');
+  const [editVisitorPhone, setEditVisitorPhone] = useState('');
+  const [editPersonalNote, setEditPersonalNote] = useState('');
+  const [savingVisitorInfo, setSavingVisitorInfo] = useState(false);
   
   // Pull-to-refresh state
   const [pullDistance, setPullDistance] = useState(0);
@@ -386,6 +399,192 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
     }
   }
 
+  // Extract proper name from messages (similar to AI extraction)
+  const extractNameFromMessages = (messages: any[], fallbackName?: string): string => {
+    if (!messages || messages.length === 0) {
+      // If no messages but we have a fallback name, try to clean it
+      if (fallbackName) {
+        return cleanName(fallbackName);
+      }
+      return 'Anonymous';
+    }
+
+    // Common non-name words to filter out
+    const nonNameWords = new Set([
+      'wellness', 'health', 'earnings', 'income', 'here', 'hi', 'hello', 'hey', 
+      'thanks', 'thank', 'you', 'looking', 'for', 'interested', 'want', 'need',
+      'can', 'help', 'please', 'yes', 'no', 'ok', 'okay', 'sure', 'maybe',
+      'benefit', 'benefits', 'and', 'or', 'the', 'a', 'an', 'to', 'in', 'on',
+      'at', 'by', 'with', 'from', 'about', 'into', 'onto', 'upon', 'of', 'off',
+      'wow', 'cool', 'nice', 'great', 'good', 'bad', 'okay', 'ok', 'yeah', 'yep',
+      'nope', 'hmm', 'um', 'uh', 'ah', 'oh', 'well', 'so', 'then', 'now'
+    ]);
+
+    // PRIORITY 1: Check AI responses first (they confirm the name)
+    // AI responses are most reliable since they've already processed the name
+    for (const msg of messages) {
+      if (msg.sender === 'ai' && msg.message_text) {
+        // Look for patterns like "Nice to meet you, [Name]!" or "Hi [Name]!"
+        const aiNamePatterns = [
+          /(?:nice to meet you|hi|hello|hey|thanks|thank you),?\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i,
+          /(?:call you|name is|you're|you are)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i,
+          /(?:meet you,|you,|greetings,)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i,
+        ];
+        
+        for (const pattern of aiNamePatterns) {
+          const match = msg.message_text.match(pattern);
+          if (match && match[1]) {
+            const extracted = match[1].trim();
+            const words = extracted.split(/\s+/);
+            
+            // CRITICAL: Must have at least 2 words (first name + last name)
+            if (words.length < 2) continue;
+            
+            // Validate each word is not a common word
+            const allValid = words.every(w => {
+              const lower = w.toLowerCase().replace(/[^a-z]/g, '');
+              return lower.length >= 2 && !nonNameWords.has(lower);
+            });
+            
+            if (allValid && extracted.length > 2) {
+              // Take first 2 words (first name + last name)
+              return words.slice(0, 2).join(' ');
+            }
+          }
+        }
+      }
+    }
+
+    // PRIORITY 2: Look for explicit name patterns in early visitor messages (first 5 messages)
+    const namePatterns = [
+      /(?:my name is|i'm|i am|call me|this is|name's|i'm called|my name's)\s+([A-Za-z]+(?:\s+[A-Za-z]+(?:\s+[A-Za-z]+)?)?)/i,
+    ];
+
+    const earlyMessages = messages.slice(0, 5); // Check first 5 messages only
+    for (const msg of earlyMessages) {
+      if (msg.sender === 'visitor' && msg.message_text) {
+        const text = msg.message_text.trim();
+        
+        // Try explicit name patterns first
+        for (const pattern of namePatterns) {
+          const match = text.match(pattern);
+          if (match && match[1]) {
+            const extracted = cleanName(match[1]);
+            if (extracted && extracted !== 'Anonymous' && extracted.length > 2) {
+              return extracted;
+            }
+          }
+        }
+      }
+    }
+
+    // PRIORITY 3: Look for messages that are ONLY names (2-3 words, no other context)
+    // Check early messages first (first 5)
+    for (const msg of earlyMessages) {
+      if (msg.sender === 'visitor' && msg.message_text) {
+        const text = msg.message_text.trim();
+        const words = text.split(/\s+/);
+        
+        // CRITICAL: Must have at least 2 words (first name + last name)
+        // Check if message is ONLY a name (2-3 words, mostly letters, short, no punctuation except maybe at end)
+        if (words.length >= 2 && words.length <= 3 && text.length < 40) {
+          // Remove trailing punctuation
+          const cleanText = text.replace(/[.,!?;:]$/, '').trim();
+          const cleanWords = cleanText.split(/\s+/);
+          
+          // Must have at least 2 words
+          if (cleanWords.length < 2) continue;
+          
+          // Check if ALL words look like names (no non-name words)
+          const allLookLikeNames = cleanWords.every(w => {
+            const clean = w.replace(/[^A-Za-z]/g, '');
+            return clean.length >= 2 && clean.length <= 15;
+          });
+          
+          // Check if NONE of the words are in the non-name list
+          const hasNoNonNameWords = cleanWords.every(w => {
+            const clean = w.toLowerCase().replace(/[^a-z]/g, '');
+            return !nonNameWords.has(clean);
+          });
+          
+          // CRITICAL: Must have at least 2 valid name words
+          if (allLookLikeNames && hasNoNonNameWords && cleanWords.length >= 2) {
+            // This looks like a pure name message - extract first 2 words
+            const capitalized = cleanWords
+              .slice(0, 2)
+              .map(w => {
+                const clean = w.replace(/[^A-Za-z]/g, '');
+                if (clean.length === 0) return '';
+                return clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase();
+              })
+              .filter(w => w.length > 0);
+            
+            // Must have exactly 2 words
+            if (capitalized.length === 2) {
+              return capitalized.join(' ');
+            }
+          }
+        }
+      }
+    }
+
+    // Fallback: clean the provided name (but be strict)
+    if (fallbackName) {
+      const cleaned = cleanName(fallbackName);
+      // Only use if it doesn't contain non-name words AND has at least 2 words
+      const words = cleaned.toLowerCase().split(/\s+/);
+      const hasNonNameWords = words.some(w => nonNameWords.has(w));
+      
+      // CRITICAL: Must have at least 2 words
+      if (cleaned && cleaned !== 'Anonymous' && !hasNonNameWords && cleaned.length > 2 && words.length >= 2) {
+        return cleaned;
+      }
+    }
+    
+    return 'Anonymous';
+  };
+
+  // Helper function to clean and format a name
+  const cleanName = (name: string): string => {
+    if (!name) return 'Anonymous';
+    
+    // Remove common suffixes/words and take first 2 words
+    const words = name.trim().split(/\s+/);
+    const nonNameWords = new Set([
+      'sumalpong', 'wellness', 'health', 'earnings', 'income', 'here',
+      'looking', 'for', 'interested', 'want', 'need', 'can', 'help',
+      'please', 'yes', 'no', 'ok', 'okay', 'sure', 'maybe', 'anonymous',
+      'benefit', 'benefits', 'and', 'or', 'the', 'a', 'an', 'to', 'in',
+      'on', 'at', 'by', 'with', 'from', 'about', 'into', 'onto', 'upon', 'of', 'off',
+      'wow', 'cool', 'nice', 'great', 'good', 'bad', 'okay', 'ok', 'yeah', 'yep',
+      'nope', 'hmm', 'um', 'uh', 'ah', 'oh', 'well', 'so', 'then', 'now'
+    ]);
+    
+    const nameWords = words
+      .filter(w => {
+        const clean = w.toLowerCase().replace(/[^a-z]/g, '');
+        return clean.length > 1 && !nonNameWords.has(clean);
+      })
+      .slice(0, 2); // Take first 2 words
+    
+    // CRITICAL: Must have at least 2 words
+    if (nameWords.length < 2) return 'Anonymous';
+    
+    // Capitalize properly
+    const capitalized = nameWords
+      .map(w => {
+        const clean = w.replace(/[^A-Za-z]/g, '');
+        if (clean.length === 0) return '';
+        return clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase();
+      })
+      .filter(w => w.length > 0);
+    
+    // Must have exactly 2 words
+    if (capitalized.length < 2) return 'Anonymous';
+    
+    return capitalized.join(' ') || 'Anonymous';
+  };
+
   const loadSessionData = async (isRefresh = false) => {
     if (isRefresh) {
       setIsRefreshing(true);
@@ -430,6 +629,31 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
     
     // Set AI paused state based on session status
     setAiChatbotPaused(sessionData?.status === 'human_takeover');
+    
+    // Initialize edit form fields
+    setEditVisitorName(sessionData?.visitor_name || '');
+    setEditVisitorEmail(sessionData?.visitor_email || '');
+    setEditVisitorPhone(sessionData?.visitor_phone || '');
+    
+    // Extract personal note from conversation_context
+    let personalNote = '';
+    if (sessionData?.conversation_context) {
+      const context = typeof sessionData.conversation_context === 'string'
+        ? JSON.parse(sessionData.conversation_context)
+        : sessionData.conversation_context;
+      personalNote = context?.personal_note || '';
+    }
+    setEditPersonalNote(personalNote);
+    
+    // Extract and update visitor name from messages if needed
+    if (messagesData && messagesData.length > 0) {
+      const extractedName = extractNameFromMessages(messagesData, sessionData?.visitor_name);
+      // Only update if the extracted name is different and more proper
+      if (extractedName !== sessionData?.visitor_name && extractedName !== 'Anonymous') {
+        // Update session with extracted name (optional - can be done silently for display only)
+        // For now, we'll use it for display purposes
+      }
+    }
     
     if (isRefresh) {
       setIsRefreshing(false);
@@ -814,7 +1038,7 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
                 </div>
                 <div className="flex-1 min-w-0">
                   <h1 className="text-base sm:text-lg font-bold text-gray-900 truncate">
-                    {session?.visitor_name || 'Anonymous'}
+                    {extractNameFromMessages(messages, session?.visitor_name)}
                   </h1>
                   <p className="text-xs text-gray-500">
                     {messages.length} messages
@@ -1044,7 +1268,7 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
                       <div className="p-2.5 bg-purple-100 rounded-full">
                         <User className="w-5 h-5 text-purple-600" />
                       </div>
-                      <span className="text-[7px] font-bold text-gray-900">Reply as Human</span>
+                      <span className="text-[8.4px] font-bold text-gray-900">Reply as Human</span>
                     </div>
                     
                     {/* Chatbot Status + Pause/Play Button */}
@@ -1216,50 +1440,248 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
 
             {/* Visitor Info - Facebook Style with Better Spacing */}
             <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-              <div className="px-6 py-3.5 bg-[#F0F2F5]">
+              <div className="px-6 py-3.5 bg-[#F0F2F5] flex items-center justify-between">
                 <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
                   <User className="w-4 h-4 text-[#1877F2]" />
                   Visitor Info
                 </h3>
-              </div>
-              <div className="px-8 py-6 space-y-1">
-                <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                  <span className="text-xs font-semibold text-gray-600">Name</span>
-                  <span className="text-sm font-bold text-gray-900 truncate max-w-[180px]">{session?.visitor_name || 'Not provided'}</span>
-                </div>
-                <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                  <span className="text-xs font-semibold text-gray-600">Email</span>
-                  <span className="text-xs font-bold text-[#1877F2] truncate max-w-[180px]">{session?.visitor_email || 'Not provided'}</span>
-                </div>
-                <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                  <span className="text-xs font-semibold text-gray-600">Phone</span>
-                  <span className="text-sm font-bold text-gray-900">{session?.visitor_phone || 'Not provided'}</span>
-                </div>
-                <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                  <span className="text-xs font-semibold text-gray-600">Channel</span>
-                  <span className="text-sm font-bold text-[#1877F2]">🌐 Web</span>
-                </div>
-                {lastAnalyzedAt && (
-                  <div className="flex items-center justify-between py-3">
-                    <span className="text-xs font-semibold text-gray-600">AI Analyzed</span>
-                    <span className="text-xs text-gray-600">last {lastAnalyzedAt}</span>
-                  </div>
+                {!isEditingVisitorInfo && (
+                  <button
+                    onClick={() => setIsEditingVisitorInfo(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-[#1877F2] hover:bg-blue-50 rounded-lg transition-colors"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    Edit Info
+                  </button>
                 )}
               </div>
+              
+              {isEditingVisitorInfo ? (
+                <div className="px-6 py-6 space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1.5">Name</label>
+                    <input
+                      type="text"
+                      value={editVisitorName}
+                      onChange={(e) => setEditVisitorName(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter visitor name"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1.5">Email</label>
+                    <input
+                      type="email"
+                      value={editVisitorEmail}
+                      onChange={(e) => setEditVisitorEmail(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter email address"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1.5">Phone</label>
+                    <input
+                      type="tel"
+                      value={editVisitorPhone}
+                      onChange={(e) => setEditVisitorPhone(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter phone number"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1.5">Personal Note</label>
+                    <textarea
+                      value={editPersonalNote}
+                      onChange={(e) => setEditPersonalNote(e.target.value)}
+                      rows={3}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                      placeholder="Add a personal note about this visitor..."
+                    />
+                  </div>
+                  
+                  <div className="flex items-center gap-2 pt-2">
+                    <button
+                      onClick={async () => {
+                        setSavingVisitorInfo(true);
+                        try {
+                          // Update session with new info
+                          const updateData: any = {
+                            visitor_name: editVisitorName || null,
+                            visitor_email: editVisitorEmail || null,
+                            visitor_phone: editVisitorPhone || null,
+                            updated_at: new Date().toISOString()
+                          };
+                          
+                          // Store personal note in conversation_context JSON field if it exists
+                          // Otherwise, we'll store it separately
+                          if (session?.conversation_context) {
+                            const currentContext = typeof session.conversation_context === 'string' 
+                              ? JSON.parse(session.conversation_context) 
+                              : session.conversation_context;
+                            updateData.conversation_context = {
+                              ...currentContext,
+                              personal_note: editPersonalNote || null
+                            };
+                          } else if (editPersonalNote) {
+                            // If conversation_context doesn't exist, create it
+                            updateData.conversation_context = {
+                              personal_note: editPersonalNote
+                            };
+                          }
+                          
+                          const { error } = await supabase
+                            .from('public_chat_sessions')
+                            .update(updateData)
+                            .eq('id', sessionId);
+                          
+                          if (error) throw error;
+                          
+                          // Reload session data
+                          await loadSessionData();
+                          setIsEditingVisitorInfo(false);
+                          alert('✅ Visitor info saved successfully!');
+                        } catch (error) {
+                          console.error('Error saving visitor info:', error);
+                          alert('Failed to save visitor info. Please try again.');
+                        } finally {
+                          setSavingVisitorInfo(false);
+                        }
+                      }}
+                      disabled={savingVisitorInfo}
+                      className="flex-1 px-4 py-2 bg-[#1877F2] text-white text-sm font-semibold rounded-lg hover:bg-[#166FE5] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {savingVisitorInfo ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-4 h-4" />
+                          Save
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsEditingVisitorInfo(false);
+                        // Reset to original values
+                        setEditVisitorName(session?.visitor_name || '');
+                        setEditVisitorEmail(session?.visitor_email || '');
+                        setEditVisitorPhone(session?.visitor_phone || '');
+                        
+                        // Extract personal note from conversation_context
+                        let personalNote = '';
+                        if (session?.conversation_context) {
+                          const context = typeof session.conversation_context === 'string'
+                            ? JSON.parse(session.conversation_context)
+                            : session.conversation_context;
+                          personalNote = context?.personal_note || '';
+                        }
+                        setEditPersonalNote(personalNote);
+                      }}
+                      disabled={savingVisitorInfo}
+                      className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="px-8 py-6 space-y-1">
+                  <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                    <span className="text-sm font-medium text-gray-500">Name</span>
+                    <span className="text-sm font-normal text-gray-900 truncate max-w-[180px]">{extractNameFromMessages(messages, session?.visitor_name) || 'Not provided'}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                    <span className="text-sm font-medium text-gray-500">Email</span>
+                    <a href={`mailto:${session?.visitor_email}`} className="text-sm font-normal text-[#1877F2] truncate max-w-[180px] hover:underline">{session?.visitor_email || 'Not provided'}</a>
+                  </div>
+                  <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                    <span className="text-sm font-medium text-gray-500">Phone</span>
+                    <span className="text-sm font-normal text-gray-900">{session?.visitor_phone || 'Not provided'}</span>
+                  </div>
+                  {(() => {
+                    let personalNote = '';
+                    if (session?.conversation_context) {
+                      const context = typeof session.conversation_context === 'string'
+                        ? JSON.parse(session.conversation_context)
+                        : session.conversation_context;
+                      personalNote = context?.personal_note || '';
+                    }
+                    return personalNote ? (
+                      <div className="flex items-start justify-between py-3 border-b border-gray-100">
+                        <span className="text-sm font-medium text-gray-500 flex items-center gap-1.5">
+                          <FileText className="w-4 h-4 text-gray-500" />
+                          Note
+                        </span>
+                        <span className="text-sm font-normal text-gray-900 max-w-[180px] text-right">{personalNote}</span>
+                      </div>
+                    ) : null;
+                  })()}
+                  <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                    <span className="text-sm font-medium text-gray-500 flex items-center gap-1.5">
+                      <Globe className="w-4 h-4 text-gray-500" />
+                      Channel
+                    </span>
+                    <span className="text-sm font-normal text-gray-900">Web</span>
+                  </div>
+                  {lastAnalyzedAt && (
+                    <div className="flex items-center justify-between py-3">
+                      <span className="text-sm font-medium text-gray-500">AI Analyzed</span>
+                      <span className="text-sm font-normal text-gray-600">last {lastAnalyzedAt}</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
-            {pipelineEntry && (
+            {(pipelineEntry || session?.prospect_id) && (
               <div className="bg-blue-50 rounded-xl border border-blue-200 p-6">
                 <div className="flex items-center gap-2 mb-3">
                   <CheckCircle className="w-5 h-5 text-blue-600" />
                   <h3 className="font-semibold text-blue-900">Converted to Prospect</h3>
                 </div>
-                <button
-                  onClick={() => onNavigate?.('prospect-detail', { prospectId: pipelineEntry.prospect_id })}
-                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
-                >
-                  View Prospect Details
-                </button>
+                <p className="text-sm text-blue-800 mb-4">
+                  This visitor has been converted to a prospect in your pipeline.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={async () => {
+                      const prospectId = pipelineEntry?.prospect_id || session?.prospect_id;
+                      if (!prospectId) return;
+                      
+                      // Load prospect data
+                      const { data: prospectData } = await supabase
+                        .from('prospects')
+                        .select('*')
+                        .eq('id', prospectId)
+                        .maybeSingle();
+                      
+                      if (prospectData) {
+                        setProspectForModal(prospectData);
+                        setShowManageProspectModal(true);
+                      }
+                    }}
+                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                  >
+                    Manage Prospect
+                  </button>
+                  <button
+                    onClick={() => {
+                      const prospectId = pipelineEntry?.prospect_id || session?.prospect_id;
+                      if (prospectId) {
+                        onNavigate?.('prospect-detail', { prospectId });
+                      }
+                    }}
+                    className="flex-1 px-4 py-2 bg-white border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 text-sm font-medium"
+                  >
+                    View Prospect Details →
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -2244,6 +2666,30 @@ export default function ChatbotSessionViewerPage({ sessionId, onBack, onNavigate
           </div>
         </div>
       )}
-      </div>
+
+      {/* Manage Prospect Modal */}
+      {showManageProspectModal && prospectForModal && (
+        <ManageProspectModal
+          isOpen={showManageProspectModal}
+          onClose={() => {
+            setShowManageProspectModal(false);
+            setProspectForModal(null);
+          }}
+          prospectId={prospectForModal.id}
+          prospect={prospectForModal}
+          sessionData={{
+            visitor_name: session?.visitor_name,
+            visitor_email: session?.visitor_email,
+            visitor_phone: session?.visitor_phone,
+            conversation_context: session?.conversation_context
+          }}
+          onProspectUpdated={async () => {
+            // Reload session data to get updated prospect info
+            await loadSessionData();
+            setShowManageProspectModal(false);
+          }}
+        />
+      )}
+    </div>
   );
 }

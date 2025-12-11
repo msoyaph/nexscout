@@ -21,13 +21,17 @@ import {
   MessageSquare,
   Facebook,
   CheckCircle,
-  Instagram,
   Globe,
   Phone,
   Video,
   Send,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  FileText,
+  ArrowRight,
+  Flame,
+  Thermometer,
+  Snowflake
 } from 'lucide-react';
 import SlideInMenu from '../components/SlideInMenu';
 import ActionPopup from '../components/ActionPopup';
@@ -129,7 +133,6 @@ export default function HomePage({
   // Verification states
   const [chatbotVerified, setChatbotVerified] = useState(false);
   const [facebookVerified, setFacebookVerified] = useState(false);
-  const [instagramVerified, setInstagramVerified] = useState(false);
   const [webChatVerified, setWebChatVerified] = useState(false);
   const [whatsappVerified, setWhatsappVerified] = useState(false);
   const [tiktokVerified, setTiktokVerified] = useState(false);
@@ -137,6 +140,26 @@ export default function HomePage({
   
   // Collapsible state
   const [showMoreButtons, setShowMoreButtons] = useState(false);
+
+  // Check and award subscription coins (weekly for Pro, daily for Free)
+  useEffect(() => {
+    const checkCoins = async () => {
+      if (!user?.id || !profile?.subscription_tier) return;
+
+      try {
+        const { subscriptionCoinService } = await import('../services/subscriptionCoinService');
+        await subscriptionCoinService.checkAndAwardCoins(user.id, profile.subscription_tier);
+      } catch (error) {
+        console.error('[HomePage] Error checking/awarding coins:', error);
+      }
+    };
+
+    // Check coins when user/profile loads (with delay to avoid blocking)
+    if (user && profile) {
+      const timer = setTimeout(checkCoins, 2000); // Wait 2 seconds after page load
+      return () => clearTimeout(timer);
+    }
+  }, [user, profile]);
 
   // Load chatbot link for welcome card
   useEffect(() => {
@@ -218,16 +241,84 @@ export default function HomePage({
 
   async function loadTopProspects() {
     try {
-      const { data, error } = await supabase
+      // Fetch all prospects for the user
+      const { data: prospects, error: prospectsError } = await supabase
         .from('prospects')
         .select('*')
-        .eq('user_id', user?.id)
-        .order('created_at', { ascending: false })
-        .limit(3);
+        .eq('user_id', user?.id);
 
-      if (error) throw error;
+      if (prospectsError) throw prospectsError;
 
-      const formatted = (data || []).map((p: any) => ({
+      if (!prospects || prospects.length === 0) {
+        setTopProspects([]);
+        setProspectsLoading(false);
+        return;
+      }
+
+      // Get latest chat session date for each prospect
+      // Use only prospect_id to avoid 400 errors from empty values and special characters
+      const prospectsWithSessions = await Promise.all(
+        prospects.map(async (p: any) => {
+          let latestSessionDate: Date | null = null;
+          
+          try {
+            // Only query by prospect_id (most reliable, avoids URL encoding issues)
+            const { data: session, error: sessionError } = await supabase
+              .from('public_chat_sessions')
+              .select('updated_at, created_at')
+              .eq('user_id', user?.id)
+              .eq('prospect_id', p.id)
+              .order('updated_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (session && !sessionError) {
+              latestSessionDate = session.updated_at 
+                ? new Date(session.updated_at) 
+                : session.created_at 
+                  ? new Date(session.created_at) 
+                  : null;
+            }
+          } catch (error) {
+            // Silently fail - session date is optional
+            console.warn(`Error loading session for prospect ${p.id}:`, error);
+          }
+
+          return {
+            prospect: p,
+            latestSessionDate,
+            score: p.metadata?.scout_score || 0,
+          };
+        })
+      );
+
+      // Sort by: 1) ScoutScore (descending), 2) Latest session date (descending)
+      prospectsWithSessions.sort((a, b) => {
+        // First sort by score (higher is better)
+        if (b.score !== a.score) {
+          return b.score - a.score;
+        }
+        
+        // If scores are equal, sort by latest session date (more recent is better)
+        if (a.latestSessionDate && b.latestSessionDate) {
+          return b.latestSessionDate.getTime() - a.latestSessionDate.getTime();
+        }
+        
+        // Prospects with sessions come before those without
+        if (a.latestSessionDate && !b.latestSessionDate) return -1;
+        if (!a.latestSessionDate && b.latestSessionDate) return 1;
+        
+        // If no sessions, sort by prospect created_at (newer first)
+        const aCreated = new Date(a.prospect.created_at || 0);
+        const bCreated = new Date(b.prospect.created_at || 0);
+        return bCreated.getTime() - aCreated.getTime();
+      });
+
+      // Take top 5
+      const top5 = prospectsWithSessions.slice(0, 5);
+
+      // Format for display
+      const formatted = top5.map(({ prospect: p }) => ({
         id: p.id,
         name: p.full_name,
         full_name: p.full_name,
@@ -413,7 +504,7 @@ export default function HomePage({
         const now = new Date();
         const tomorrow = new Date(now);
         tomorrow.setDate(tomorrow.getDate() + 1);
-        
+
         const { data: reminders, error: remindersError } = await supabase
           .from('prospect_reminders')
           .select(`
@@ -427,12 +518,23 @@ export default function HomePage({
           .order('reminder_date', { ascending: true })
           .limit(5);
 
+        // Handle 404 (table doesn't exist) gracefully
+        if (remindersError && remindersError.code !== 'PGRST116') {
+          throw remindersError;
+        }
+
         // Handle 404 error (table doesn't exist) gracefully
         if (remindersError) {
-          // If table doesn't exist (404), skip reminders
-          if (remindersError.code === 'PGRST116' || remindersError.message?.includes('404')) {
-            console.log('prospect_reminders table not found, skipping reminders');
+          // If table doesn't exist (404, PGRST205, or "Could not find the table"), skip reminders silently
+          if (remindersError.code === 'PGRST116' || 
+              remindersError.code === 'PGRST205' || 
+              remindersError.message?.includes('404') ||
+              remindersError.message?.includes('Could not find the table')) {
+            // Table doesn't exist - this is fine, just skip reminders
+            // Don't log as error, it's expected if the table hasn't been created yet
+            // Silently continue - no console.error
           } else {
+            // Only log non-404 errors
             console.error('Error loading reminders:', remindersError);
           }
         } else if (reminders) {
@@ -562,6 +664,16 @@ export default function HomePage({
     if (score >= 80) return 'bg-[#3B82F6] text-white';
     if (score >= 70) return 'bg-[#F59E0B] text-white';
     return 'bg-[#6B7280] text-white';
+  }
+
+  function getTemperatureIndicator(score: number) {
+    if (score >= 70) {
+      return { label: 'Hot', icon: Flame, color: 'text-red-600' };
+    } else if (score >= 50) {
+      return { label: 'Warm', icon: Thermometer, color: 'text-orange-500' };
+    } else {
+      return { label: 'Cold', icon: Snowflake, color: 'text-blue-400' };
+    }
   }
 
   const handleNavigate = (page: string, options?: any) => {
@@ -1085,7 +1197,7 @@ export default function HomePage({
             </span>
           </button>
           <button
-            onClick={() => handleNavigate('purchase')}
+            onClick={() => handleNavigate('wallet')}
             className="bg-gradient-to-r from-[#FEF3C7] to-[#FDE68A] rounded-full px-4 py-2 flex items-center gap-2 shadow-[0px_8px_24px_rgba(0,0,0,0.06)] shrink-0 hover:shadow-[0px_8px_32px_rgba(0,0,0,0.12)] transition-shadow"
           >
             <Coins className="size-5 text-[#F59E0B]" fill="#F59E0B" />
@@ -1095,97 +1207,104 @@ export default function HomePage({
       </header>
 
       <main className="px-6 space-y-6 mt-6">
-        {/* Welcome Card - Test Your Public AI Chatbot */}
+        {/* Welcome Card - 3-Step Guided Tour */}
         {chatbotLink && (
           <section className="bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 rounded-[30px] shadow-[0px_8px_24px_rgba(0,0,0,0.08)] border border-[#E5E7EB] overflow-hidden">
             <div className="p-6">
-              <div className="flex items-start gap-4">
+              <div className="flex items-start gap-4 mb-6">
                 <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-xl flex items-center justify-center">
-                  <MessageSquare className="w-6 h-6 text-white" />
+                  <Sparkles className="w-6 h-6 text-white" />
                 </div>
                 <div className="flex-1">
                   <h3 className="font-bold text-lg text-gray-900 mb-1">
-                    Welcome! 🎉 Test Your AI Chatbot
+                    Welcome! 🎉 Get Started with Your AI Sales Agent
                   </h3>
-                  <p className="text-sm text-gray-600 mb-4">
-                    Check out your personal Public AI Chatbot link and see how it works! Share it with friends or test it yourself.
+                  <p className="text-sm text-gray-600">
+                    Follow these 3 simple steps to start running your AI Sales Agent
                   </p>
-                  <div className="flex flex-col gap-2">
-                    <a
-                      href={`${import.meta.env.VITE_APP_URL || 'https://nexscout.co'}/chat/${chatbotLink}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex relative items-center gap-2 px-5 py-2.5 bg-[#1877F2] text-white font-semibold rounded-lg hover:bg-[#166FE5] transition-colors"
-                    >
-                      <MessageSquare className="w-4 h-4" />
-                      Test My Chatbot
-                      {chatbotVerified && (
-                        <CheckCircle className="w-4 h-4 text-green-300 ml-auto" />
-                      )}
-                      {chatbotVerified && (
-                        <CheckCircle className="w-4 h-4 text-green-300 ml-auto" />
-                      )}
-                    </a>
-                    <button
-                      onClick={() => {
-                        const isProUser = profile?.subscription_tier === 'pro' || isSuperAdmin;
-                        if (isProUser) {
-                          const fbAppId = import.meta.env.VITE_FACEBOOK_APP_ID || 'YOUR_FB_APP_ID';
-                          const redirectUri = `${window.location.origin}/api/facebook/callback`;
-                          const scopes = 'pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement';
-                          const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes}&state=${user?.id}`;
-                          window.location.href = authUrl;
-                        }
-                      }}
-                      disabled={profile?.subscription_tier !== 'pro' && !isSuperAdmin}
-                      className={`inline-flex items-center gap-2 px-5 py-2.5 font-semibold rounded-xl transition-all shadow-lg relative ${
-                        profile?.subscription_tier === 'pro' || isSuperAdmin
-                          ? 'bg-white text-[#1877F2] border border-[#E4E6EB] hover:bg-[#F0F2F5] cursor-pointer'
-                          : 'bg-[#E4E6EB] text-[#8A8D91] cursor-not-allowed'
-                      }`}
-                      title={profile?.subscription_tier === 'pro' || isSuperAdmin ? 'Connect your Facebook Page' : 'Pro feature - Upgrade to connect your Facebook Page'}
-                    >
-                      {profile?.subscription_tier !== 'pro' && !isSuperAdmin && (
-                        <Crown className="w-4 h-4 text-amber-500 absolute -top-1 -right-1" />
-                      )}
-                      <Facebook className="w-4 h-4" />
-                      Connect Your FB Page
-                      {profile?.subscription_tier !== 'pro' && !isSuperAdmin && (
-                        <span className="text-xs ml-1">(Pro)</span>
-                      )}
-                      {facebookVerified && (
-                        <CheckCircle className="w-4 h-4 text-green-300 ml-auto" />
-                      )}
-                    </button>
-                    <button
-                      onClick={() => {
-                        const isProUser = profile?.subscription_tier === 'pro' || isSuperAdmin;
-                        if (isProUser) {
-                          // TODO: Add Instagram connection logic
-                          onNavigate?.('chatbot-settings');
-                        }
-                      }}
-                      disabled={profile?.subscription_tier !== 'pro' && !isSuperAdmin}
-                      className={`inline-flex items-center gap-2 px-5 py-2.5 font-semibold rounded-xl transition-all shadow-lg relative ${
-                        profile?.subscription_tier === 'pro' || isSuperAdmin
-                          ? 'bg-[#E4405F] text-white cursor-pointer'
-                          : 'bg-[#E4E6EB] text-[#8A8D91] cursor-not-allowed'
-                      }`}
-                      title={profile?.subscription_tier === 'pro' || isSuperAdmin ? 'Connect Instagram' : 'Pro feature - Upgrade to connect Instagram'}
-                    >
-                      {profile?.subscription_tier !== 'pro' && !isSuperAdmin && (
-                        <Crown className="w-4 h-4 text-amber-500 absolute -top-1 -right-1" />
-                      )}
-                      <Instagram className="w-4 h-4" />
-                      Connect Instagram
-                      {instagramVerified && (
-                        <CheckCircle className="w-4 h-4 text-green-300 ml-auto" />
-                      )}
-                      {profile?.subscription_tier !== 'pro' && !isSuperAdmin && (
-                        <span className="text-xs ml-1">(Pro)</span>
-                      )}
-                    </button>
+                </div>
+              </div>
+              
+              {/* 3-Step Guide */}
+              <div className="space-y-3">
+                {/* Step 1: Test My Chatbot */}
+                <div className="flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-200 hover:border-blue-300 transition-colors">
+                  <div className="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold text-sm">
+                    1
                   </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-semibold text-gray-900 mb-1">Test My Chatbot</h4>
+                    <p className="text-xs text-gray-600">Try your AI Sales Agent and see how it works</p>
+                  </div>
+                  <a
+                    href={`${import.meta.env.VITE_APP_URL || 'https://nexscout.co'}/chat/${chatbotLink}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-shrink-0 inline-flex items-center gap-2 px-4 py-2 bg-[#1877F2] text-white font-semibold rounded-lg hover:bg-[#166FE5] transition-colors"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    {chatbotVerified && (
+                      <CheckCircle className="w-4 h-4 text-green-300" />
+                    )}
+                    <ArrowRight className="w-4 h-4" />
+                  </a>
+                </div>
+
+                {/* Step 2: Check AI Instructions */}
+                <div className="flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-200 hover:border-blue-300 transition-colors">
+                  <div className="flex-shrink-0 w-8 h-8 bg-purple-500 text-white rounded-full flex items-center justify-center font-bold text-sm">
+                    2
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-semibold text-gray-900 mb-1">Check AI Instructions</h4>
+                    <p className="text-xs text-gray-600">Configure your AI's knowledge and behavior</p>
+                  </div>
+                  <button
+                    onClick={() => setCurrentPage('chatbot-settings')}
+                    className="flex-shrink-0 inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition-colors"
+                  >
+                    <FileText className="w-4 h-4" />
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Step 3: Connect FB Page */}
+                <div className="flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-200 hover:border-blue-300 transition-colors">
+                  <div className="flex-shrink-0 w-8 h-8 bg-pink-500 text-white rounded-full flex items-center justify-center font-bold text-sm">
+                    3
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-semibold text-gray-900 mb-1">Connect FB Page</h4>
+                    <p className="text-xs text-gray-600">Connect your Facebook Page to enable Messenger</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const isProUser = profile?.subscription_tier === 'pro' || isSuperAdmin;
+                      if (isProUser) {
+                        const fbAppId = import.meta.env.VITE_FACEBOOK_APP_ID || 'YOUR_FB_APP_ID';
+                        const redirectUri = `${window.location.origin}/api/facebook/callback`;
+                        const scopes = 'pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement';
+                        const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes}&state=${user?.id}`;
+                        window.location.href = authUrl;
+                      }
+                    }}
+                    disabled={profile?.subscription_tier !== 'pro' && !isSuperAdmin}
+                    className={`flex-shrink-0 inline-flex items-center gap-2 px-4 py-2 font-semibold rounded-lg transition-colors relative ${
+                      profile?.subscription_tier === 'pro' || isSuperAdmin
+                        ? 'bg-white text-[#1877F2] border-2 border-[#1877F2] hover:bg-blue-50 cursor-pointer'
+                        : 'bg-[#E4E6EB] text-[#8A8D91] cursor-not-allowed'
+                    }`}
+                    title={profile?.subscription_tier === 'pro' || isSuperAdmin ? 'Connect your Facebook Page' : 'Pro feature - Upgrade to connect your Facebook Page'}
+                  >
+                    {profile?.subscription_tier !== 'pro' && !isSuperAdmin && (
+                      <Crown className="w-4 h-4 text-amber-500 absolute -top-1 -right-1" />
+                    )}
+                    <Facebook className="w-4 h-4" />
+                    {facebookVerified && (
+                      <CheckCircle className="w-4 h-4 text-green-500" />
+                    )}
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             </div>
@@ -1196,7 +1315,7 @@ export default function HomePage({
           <div className="p-5 border-b border-[#E5E7EB] flex justify-between items-center">
             <h2 className="font-bold text-lg flex items-center gap-2">
               <Users className="size-5 text-[#1877F2]" />
-              Top 3 Prospects Today
+              Top 5 Prospects Today
             </h2>
             <span className="text-xs text-[#6B7280]">{topProspects.length} leads</span>
           </div>
@@ -1227,15 +1346,28 @@ export default function HomePage({
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-sm font-semibold text-[#1F2937]">{prospect.name}</h3>
-                      {getPlatformIcon(prospect.platform)}
+                      <h3 className="text-sm font-semibold text-[#1F2937] truncate whitespace-nowrap">{prospect.name}</h3>
+                    </div>
+                    <div className="flex items-center gap-2 mb-1">
                       <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${getScoreColor(prospect.score)}`}>
                         {prospect.score}
                       </div>
+                      {(() => {
+                        const temp = getTemperatureIndicator(prospect.score);
+                        const TempIcon = temp.icon;
+                        return (
+                          <div className={`flex items-center gap-1 ${temp.color}`}>
+                            <TempIcon className="w-3 h-3" />
+                            <span className="text-[10px] font-semibold">{temp.label}</span>
+                          </div>
+                        );
+                      })()}
                     </div>
-                    <p className="text-xs text-[#6B7280] line-clamp-1">
-                      {prospect.analysis}
-                    </p>
+                    {prospect.analysis && prospect.analysis !== 'No analysis available' && (
+                      <p className="text-xs text-[#6B7280] line-clamp-1">
+                        {prospect.analysis}
+                      </p>
+                    )}
                   </div>
                   <button
                     onClick={() => handleNavigate('prospect-detail', { prospectId: prospect.id })}

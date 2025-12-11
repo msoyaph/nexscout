@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, MessageCircle, Copy, Check, CheckCircle, ExternalLink, Save, Facebook, MessageSquare, Phone, Send, Webhook, Key, Link, AlertCircle, Database, Plus, Sparkles, RefreshCw, Trash2, Power, X, Edit, Lock, Crown, Ban, Flag, Archive, RotateCcw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import AiSystemInstructionsEditor, { type Attachment } from '../components/editor/AiSystemInstructionsEditor';
 
 interface ChatbotSettingsPageProps {
   onBack?: () => void;
@@ -11,7 +12,7 @@ interface ChatbotSettingsPageProps {
 export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSettingsPageProps) {
   const { user } = useAuth();
   const isSuperAdmin = user?.email === 'geoffmax22@gmail.com';
-  const [activeTab, setActiveTab] = useState<'settings' | 'training' | 'integrations' | 'others'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'training' | 'integrations' | 'others'>('training');
   const [settings, setSettings] = useState<any>(null);
   const [chatSlug, setChatSlug] = useState('');
   const [copied, setCopied] = useState(false);
@@ -59,6 +60,7 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
   const [customInstructions, setCustomInstructions] = useState('');
   const [useCustomInstructions, setUseCustomInstructions] = useState(false);
   const [overrideIntelligence, setOverrideIntelligence] = useState(false);
+  const [instructionsAttachments, setInstructionsAttachments] = useState<Attachment[]>([]);
 
   // Others Tab - Archive, Spam and Reported Sessions
   const [archivedSessions, setArchivedSessions] = useState<any[]>([]);
@@ -74,9 +76,9 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
       loadUserTier();
       if (activeTab === 'training') {
         loadTrainingData();
+      }
       if (activeTab === 'others') {
         loadArchivedSpamAndReportedSessions();
-      }
       }
     }
   }, [user, activeTab]);
@@ -104,11 +106,13 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
       setSettings({
         display_name: data.display_name || 'AI Assistant',
         greeting_message: data.greeting_message || 'Hi! How can I help you today?',
+        second_greeting_message: data.second_greeting_message || '',
+        second_greeting_delay: data.second_greeting_delay ?? 3,
         tone: data.tone || 'professional',
         reply_depth: data.reply_depth || 'medium',
         closing_style: data.closing_style || 'warm',
         objection_style: data.objection_style || 'empathetic',
-        auto_qualify_threshold: data.auto_qualify_threshold ?? 0.7,
+        auto_qualify_threshold: data.auto_qualify_threshold ?? 0.30,
         auto_convert_to_prospect: data.auto_convert_to_prospect ?? true,
         enabled_channels: data.enabled_channels || ['web'],
         widget_color: data.widget_color || '#3B82F6',
@@ -123,16 +127,23 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
       setCustomInstructions(data.custom_system_instructions || '');
       setUseCustomInstructions(data.use_custom_instructions || false);
       setOverrideIntelligence(data.instructions_override_intelligence || false);
+      
+      // Load attachments from integrations.instructions_attachments or create new field
+      // For now, store in integrations JSONB field
+      const loadedAttachments = data.integrations?.instructions_attachments || [];
+      setInstructionsAttachments(loadedAttachments);
     } else {
       // Create default settings
       const defaultSettings = {
         display_name: 'AI Assistant',
         greeting_message: 'Hi! How can I help you today?',
+        second_greeting_message: '',
+        second_greeting_delay: 3,
         tone: 'professional',
         reply_depth: 'medium',
         closing_style: 'warm',
         objection_style: 'empathetic',
-        auto_qualify_threshold: 0.7,
+        auto_qualify_threshold: 0.30,
         auto_convert_to_prospect: true,
         enabled_channels: ['web'],
         widget_color: '#3B82F6',
@@ -216,20 +227,27 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
         user_id: user.id,
         display_name: settings.display_name || 'AI Assistant',
         greeting_message: settings.greeting_message || 'Hi! How can I help you today?',
+        second_greeting_message: settings.second_greeting_message || null,
+        second_greeting_delay: settings.second_greeting_delay ?? 3,
         tone: settings.tone || 'professional',
         reply_depth: settings.reply_depth || 'medium',
         closing_style: settings.closing_style || 'warm',
         objection_style: settings.objection_style || 'empathetic',
-        auto_qualify_threshold: settings.auto_qualify_threshold ?? 0.7,
+        auto_qualify_threshold: settings.auto_qualify_threshold ?? 0.30,
         auto_convert_to_prospect: settings.auto_convert_to_prospect ?? true,
         enabled_channels: settings.enabled_channels || ['web'],
         widget_color: settings.widget_color || '#3B82F6',
         widget_position: settings.widget_position || 'bottom-right',
         is_active: settings.is_active ?? true,
-        integrations: integrations || {},
+        integrations: {
+          ...integrations,
+          instructions_attachments: instructionsAttachments // Store attachments in integrations JSONB
+        },
         custom_system_instructions: customInstructions || null,
         use_custom_instructions: useCustomInstructions || false,
-        instructions_override_intelligence: overrideIntelligence || false,
+        // When AI System Instructions is enabled, it should override auto company data
+        // since it's the primary intelligence source
+        instructions_override_intelligence: useCustomInstructions ? true : false,
         updated_at: new Date().toISOString()
       };
 
@@ -662,7 +680,7 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
         <div className="max-w-4xl mx-auto px-3 sm:px-6 py-2.5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <button
-              onClick={onBack}
+              onClick={() => onNavigate?.('chatbot-sessions')}
               className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
             >
               <ArrowLeft className="w-5 h-5" />
@@ -685,19 +703,9 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
       </div>
 
       {/* Compact Tabs - Facebook Style */}
-      <div className="bg-white border-b border-gray-200 sticky top-[53px] sm:top-[57px] z-10">
+      <div className="bg-white border-b border-gray-200">
         <div className="max-w-4xl mx-auto px-3 sm:px-6">
           <div className="flex gap-1 overflow-x-auto scrollbar-hide">
-            <button
-              onClick={() => setActiveTab('settings')}
-              className={`px-3 py-2 font-semibold text-sm sm:text-base whitespace-nowrap border-b-2 transition-colors ${
-                activeTab === 'settings'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
-            >
-              Settings
-            </button>
             <button
               onClick={() => setActiveTab('training')}
               className={`px-3 py-2 font-semibold text-sm sm:text-base whitespace-nowrap border-b-2 transition-colors flex items-center gap-1.5 ${
@@ -707,7 +715,7 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
               }`}
             >
               <Database className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span>Training Data</span>
+              <span>Training</span>
             </button>
             <button
               onClick={() => setActiveTab('integrations')}
@@ -718,6 +726,16 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
               }`}
             >
               Integrations
+            </button>
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`px-3 py-2 font-semibold text-sm sm:text-base whitespace-nowrap border-b-2 transition-colors ${
+                activeTab === 'settings'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              Settings
             </button>
             <button
               onClick={() => setActiveTab('others')}
@@ -769,7 +787,7 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Greeting Message
+                1st Greeting Message
               </label>
               <textarea
                 value={settings.greeting_message}
@@ -778,6 +796,38 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="The first message visitors will see..."
               />
+              <p className="mt-1 text-xs text-gray-500">This message appears immediately when a visitor starts a chat.</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                2nd Greeting Message (Optional)
+              </label>
+              <textarea
+                value={settings.second_greeting_message || ''}
+                onChange={(e) => setSettings({ ...settings, second_greeting_message: e.target.value })}
+                rows={3}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="May I know your name please?"
+              />
+              <p className="mt-1 text-xs text-gray-500">This message appears after the first greeting with a typing animation.</p>
+              
+              {settings.second_greeting_message && (
+                <div className="mt-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Delay (seconds)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={settings.second_greeting_delay || 3}
+                    onChange={(e) => setSettings({ ...settings, second_greeting_delay: parseInt(e.target.value) || 3 })}
+                    className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">Time to wait before showing the 2nd greeting (1-10 seconds).</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -957,52 +1007,40 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
           </>
         )}
 
-        {/* Training Data Tab */}
+        {/* Training Tab - AI System Instructions + Training Data */}
         {activeTab === 'training' && (
           <div className="space-y-3">
-            {/* Compact Header - Facebook Style */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sticky top-0 z-10">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
-                    <Database className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-bold text-gray-900">Training Data</h2>
-                    <p className="text-xs text-gray-500">{companyDataStats.total} total entries</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowAddTraining(!showAddTraining)}
-                  className="px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm font-semibold hover:bg-blue-700 flex items-center gap-1.5 transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span className="hidden sm:inline">Add</span>
-                </button>
-              </div>
-            </div>
-
-            {/* AI System Instructions - Compact Card */}
+            {/* AI System Instructions - Primary Source - Shown First */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
               <div className="bg-gradient-to-r from-purple-600 to-blue-600 px-3 py-2.5">
                 <div className="flex items-center gap-2 text-white">
                   <Sparkles className="w-5 h-5" />
                   <div className="flex-1">
                     <h3 className="text-sm font-bold">AI System Instructions</h3>
-                    <p className="text-xs opacity-90">Power user mode</p>
+                    <p className="text-xs opacity-90">Primary source for AI behavior & knowledge</p>
                   </div>
                 </div>
               </div>
 
-              {/* Enable Custom Instructions Toggle */}
-              <div className="p-3 space-y-2">
+              {/* AI System Instructions Toggle */}
+              <div className="p-3">
                 <div className="flex items-center justify-between">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900">Enable Custom Instructions</p>
-                    <p className="text-xs text-gray-600 truncate">Custom AI behavior & flow</p>
+                    <p className="text-sm font-semibold text-gray-900">AI System Instructions</p>
+                    <p className="text-xs text-gray-600">Main intelligence and knowledge base for AI Chatbot</p>
                   </div>
                   <button
-                    onClick={() => setUseCustomInstructions(!useCustomInstructions)}
+                    onClick={() => {
+                      const newValue = !useCustomInstructions;
+                      setUseCustomInstructions(newValue);
+                      // When enabling AI System Instructions, automatically set override to true
+                      // since it's the primary intelligence source
+                      if (newValue) {
+                        setOverrideIntelligence(true);
+                      } else {
+                        setOverrideIntelligence(false);
+                      }
+                    }}
                     className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ml-3 ${
                       useCustomInstructions ? 'bg-purple-600' : 'bg-gray-300'
                     }`}
@@ -1014,62 +1052,35 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
                     />
                   </button>
                 </div>
-
-                {useCustomInstructions && (
-                  <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900">Override Intelligence</p>
-                      <p className="text-xs text-gray-600 truncate">Replace auto company data</p>
-                    </div>
-                    <button
-                      onClick={() => setOverrideIntelligence(!overrideIntelligence)}
-                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ml-3 ${
-                        overrideIntelligence ? 'bg-orange-600' : 'bg-gray-300'
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
-                          overrideIntelligence ? 'translate-x-5' : 'translate-x-0.5'
-                        }`}
-                      />
-                    </button>
-                  </div>
-                )}
               </div>
 
               {/* Custom Instructions Editor */}
               {useCustomInstructions && (
                 <>
                   <div className="border-t border-gray-200 p-3">
-                    <textarea
+                    <AiSystemInstructionsEditor
                       value={customInstructions}
-                      onChange={(e) => setCustomInstructions(e.target.value)}
-                      placeholder="Example: You are a sales assistant for [Company Name]...&#10;&#10;Products: Product A ($99/mo), Product B ($199/mo)&#10;&#10;Flow: 1) Greet 2) Qualify 3) Match product 4) Share pricing 5) Book demo&#10;&#10;Contact: sales@company.com, calendly.com/demo"
-                      rows={Math.max(8, Math.ceil(customInstructions.length / 100))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500 focus:border-purple-500 font-mono text-xs resize-y"
-                      style={{ minHeight: '200px', maxHeight: '400px' }}
+                      onChange={setCustomInstructions}
+                      label=""
+                      helperText="Tip: You can format text, add images, attach files, and embed YouTube videos."
+                      placeholder="Example: You are a sales assistant for [Company Name]...
+
+Products: Product A ($99/mo), Product B ($199/mo)
+
+Flow: 1) Greet 2) Qualify 3) Match product 4) Share pricing 5) Book demo
+
+Contact: sales@company.com, calendly.com/demo"
+                      userId={user?.id}
+                      attachments={instructionsAttachments}
+                      onAttachmentsChange={setInstructionsAttachments}
                     />
-                    <div className="flex items-center justify-between mt-1.5">
-                      <p className="text-xs text-gray-500">{customInstructions.length} chars</p>
-                      {overrideIntelligence && (
-                        <p className="text-xs text-orange-600 font-medium">⚠️ Override ON</p>
+                    {useCustomInstructions && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-purple-600" />
+                        <p className="text-xs text-purple-600 font-medium">✓ AI System Instructions is active and will be used as the primary intelligence source</p>
+                      </div>
                       )}
                     </div>
-                  </div>
-
-                  {/* Collapsible Tips */}
-                  <details className="border-t border-gray-200">
-                    <summary className="px-3 py-2 text-xs font-semibold text-blue-700 cursor-pointer hover:bg-blue-50 flex items-center gap-1">
-                      💡 Tips & Examples
-                    </summary>
-                    <div className="px-3 py-2 bg-blue-50 text-xs text-gray-700 space-y-1">
-                      <p>• Define products, pricing & unique value</p>
-                      <p>• Set conversation goals (demo, qualify, answer)</p>
-                      <p>• Add contact methods & booking links</p>
-                      <p>• Specify tone (professional, casual, friendly)</p>
-                      <p>• Include objection handlers & FAQs</p>
-                    </div>
-                  </details>
                 </>
               )}
             </div>
@@ -1223,17 +1234,7 @@ export default function ChatbotSettingsPage({ onBack, onNavigate }: ChatbotSetti
                   <p className="text-sm text-gray-600">Loading...</p>
                 </div>
               ) : trainingData.length === 0 ? (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
-                  <Database className="w-10 h-10 text-gray-400 mx-auto mb-2" />
-                  <h3 className="text-sm font-semibold text-gray-900 mb-1">No Training Data</h3>
-                  <p className="text-xs text-gray-600 mb-3">Add entries to train your AI</p>
-                  <button
-                    onClick={() => setShowAddTraining(true)}
-                    className="px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm font-semibold hover:bg-blue-700"
-                  >
-                    Add First Entry
-                  </button>
-                </div>
+                null // Hide "No Training Data" section
               ) : (
                 trainingData.map((item) => (
                   <div key={item.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">

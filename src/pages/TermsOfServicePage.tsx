@@ -78,7 +78,7 @@ export default function TermsOfServicePage({ onNavigateBack }: TermsOfServicePag
               <span className="font-semibold text-[#111827]">Auto-Renewal:</span> Subscriptions automatically renew at the end of each billing period unless cancelled before the renewal date. You authorize us to charge your payment method for renewal fees.
             </p>
             <p>
-              <span className="font-semibold text-[#111827]">Refund Policy:</span> We offer a 7-day money-back guarantee for new subscriptions. After 7 days, all payments are non-refundable. Cancellations prevent future charges but do not provide refunds for the current period.
+              <span className="font-semibold text-[#111827]">Refund Policy:</span> All subscription payments are non-refundable. Cancellations prevent future charges but do not provide refunds for the current period.
             </p>
             <p>
               <span className="font-semibold text-[#111827]">Price Changes:</span> We reserve the right to modify subscription prices with 30 days advance notice. Price changes will not affect your current billing period.

@@ -62,9 +62,14 @@ export default function SubscriptionCheckoutPage({
     setProcessing(true);
 
     try {
-      // In production, integrate with actual payment processor (Stripe, PayPal, etc.)
-      // For now, simulate payment processing
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // SuperAdmin bypass: Skip payment for SuperAdmin
+      const isSuperAdmin = profile.email === 'geoffmax22@gmail.com';
+      
+      if (!isSuperAdmin) {
+        // In production, integrate with actual payment processor (Stripe, PayPal, etc.)
+        // For now, simulate payment processing
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
 
       // Get the plan ID from the database
       const { data: planData, error: planError } = await supabase
@@ -77,12 +82,18 @@ export default function SubscriptionCheckoutPage({
       if (!planData) throw new Error('Plan not found');
 
       // Calculate subscription end date
-      const endDate = new Date();
-      if (billingCycle === 'monthly') {
-        endDate.setMonth(endDate.getMonth() + 1);
-      } else {
-        endDate.setFullYear(endDate.getFullYear() + 1);
-      }
+      // SuperAdmin gets lifetime access (far future date), others get normal period
+      const endDate = isSuperAdmin 
+        ? new Date('2099-12-31 23:59:59+00')
+        : (() => {
+            const date = new Date();
+            if (billingCycle === 'monthly') {
+              date.setMonth(date.getMonth() + 1);
+            } else {
+              date.setFullYear(date.getFullYear() + 1);
+            }
+            return date;
+          })();
 
       // Update user's subscription
       const { error: profileError } = await supabase
@@ -96,29 +107,40 @@ export default function SubscriptionCheckoutPage({
       if (profileError) throw profileError;
 
       // Create subscription record
+      // Note: user_subscriptions doesn't have amount/currency/payment_status columns
+      // Those are stored in payment_history table instead
       const { error: subError } = await supabase
         .from('user_subscriptions')
-        .insert({
+        .upsert({
           user_id: profile.id,
           plan_id: planData.id,
           status: 'active',
-          billing_cycle: billingCycle,
-          amount: price,
-          currency: 'PHP',
+          billing_cycle: isSuperAdmin ? 'annual' : billingCycle, // Use 'annual' since CHECK constraint doesn't allow 'lifetime'
           current_period_start: new Date().toISOString(),
-          current_period_end: endDate.toISOString()
+          current_period_end: endDate.toISOString(),
+          cancel_at_period_end: false,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id'
         });
 
       if (subError) throw subError;
 
-      // Award weekly coins for paid tiers
+      // Award first week's coins immediately after subscription payment
+      // Subsequent weekly coins will be distributed automatically via weekly distribution service
       if (pricing.weeklyCoins > 0) {
-        await supabase.rpc('record_coin_transaction', {
+        const { error: coinError } = await supabase.rpc('record_coin_transaction', {
           p_user_id: profile.id,
           p_amount: pricing.weeklyCoins,
           p_type: 'bonus',
-          p_description: `Welcome bonus: ${pricing.weeklyCoins} coins for ${pricing.displayName} subscription`
+          p_description: `Pro subscription: ${pricing.weeklyCoins} coins (first week) - Weekly distribution starts after payment`
         });
+        
+        if (coinError) {
+          console.error('[SubscriptionCheckout] Error awarding first week coins:', coinError);
+        } else {
+          console.log(`[SubscriptionCheckout] ✅ Awarded ${pricing.weeklyCoins} coins (first week) to Pro subscriber`);
+        }
       }
 
       onSuccess();

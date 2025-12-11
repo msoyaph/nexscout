@@ -1,6 +1,6 @@
 import { supabase } from '../../lib/supabase';
 
-export type Industry = 'mlm' | 'insurance' | 'real_estate' | 'direct_selling';
+export type Industry = 'mlm' | 'insurance' | 'real_estate' | 'ecommerce' | 'direct_selling';
 
 export interface ConversionPattern {
   id: string;
@@ -95,6 +95,42 @@ const PH_MARKET_PATTERNS: ConversionPattern[] = [
     successRate: 0.48,
     avgTimeToCloseDays: 18,
     bestDaysOfWeek: ['Tuesday', 'Wednesday', 'Thursday'],
+    bestTimesOfDay: ['morning', 'afternoon'],
+  },
+  {
+    id: 'ecommerce_cod_quick',
+    industry: 'ecommerce',
+    persona: 'young_professional',
+    sequenceSummary: 'COD-focused ecommerce quick conversion',
+    steps: [
+      'Product inquiry via Messenger/WhatsApp',
+      'Share product details and COD info',
+      'Answer shipping questions (ilang days delivery)',
+      'Provide total price (magkano total)',
+      'Confirm COD availability',
+      'Order placed within 1-2 days',
+    ],
+    successRate: 0.45,
+    avgTimeToCloseDays: 2,
+    bestDaysOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+    bestTimesOfDay: ['afternoon', 'evening'],
+  },
+  {
+    id: 'ecommerce_payment_options',
+    industry: 'ecommerce',
+    persona: 'business_owner',
+    sequenceSummary: 'Payment method qualification for ecommerce',
+    steps: [
+      'Product interest expressed',
+      'Clarify payment preference (GCash vs card)',
+      'Share payment links for both options',
+      'Follow up on payment status',
+      'Confirm order and shipping details',
+      'Order completed',
+    ],
+    successRate: 0.40,
+    avgTimeToCloseDays: 3,
+    bestDaysOfWeek: ['Monday', 'Tuesday', 'Wednesday'],
     bestTimesOfDay: ['morning', 'afternoon'],
   },
 ];

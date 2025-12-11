@@ -205,8 +205,10 @@ export default function ManageSubscriptionPage({ onBack, onNavigate }: ManageSub
     });
   };
 
-  const formatAmount = (amount: number, currency: string) => {
-    return `${currency === 'PHP' ? '₱' : '$'}${amount.toFixed(2)}`;
+  const formatAmount = (amount: number | null | undefined, currency: string | null | undefined) => {
+    const safeAmount = amount ?? 0;
+    const safeCurrency = currency || 'PHP';
+    return `${safeCurrency === 'PHP' ? '₱' : '$'}${safeAmount.toFixed(2)}`;
   };
 
   const getStatusBadge = (status: string) => {
@@ -260,17 +262,34 @@ export default function ManageSubscriptionPage({ onBack, onNavigate }: ManageSub
           <h2 className="text-lg font-bold mb-4">Current Plan</h2>
 
           {isFreeUser ? (
-            <div className="text-center py-8">
-              <div className="size-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
-                <Zap className="size-8 text-slate-400" />
+            <div className="space-y-4">
+              <div className="text-center py-4">
+                <div className="size-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                  <Zap className="size-8 text-slate-400" />
+                </div>
+                <p className="text-[#6B7280] mb-4">You're on the Free plan</p>
+                <button
+                  onClick={() => onNavigate?.('pricing')}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-[16px] font-semibold shadow-lg hover:bg-blue-700 transition-colors"
+                >
+                  Upgrade Now
+                </button>
               </div>
-              <p className="text-[#6B7280] mb-4">You're on the Free plan</p>
-              <button
-                onClick={() => onNavigate?.('pricing')}
-                className="px-6 py-3 bg-blue-600 text-white rounded-[16px] font-semibold shadow-lg hover:bg-blue-700 transition-colors"
-              >
-                Upgrade Now
-              </button>
+              
+              <div className="pt-4 border-t border-[#E5E7EB] space-y-2">
+                <div className="flex items-center gap-2 text-sm">
+                  <Coins className="size-4 text-[#F59E0B]" />
+                  <span className="text-[#6B7280]">
+                    Daily coins: <span className="font-semibold text-[#111827]">2 coins</span>
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <Coins className="size-4 text-[#F59E0B]" />
+                  <span className="text-[#6B7280]">
+                    Weekly coins: <span className="font-semibold text-[#111827]">14 coins</span> (2/day × 7 days)
+                  </span>
+                </div>
+              </div>
             </div>
           ) : (
             <div className="space-y-4">
@@ -304,6 +323,7 @@ export default function ManageSubscriptionPage({ onBack, onNavigate }: ManageSub
                         Weekly coins: <span className="font-semibold text-[#111827]">
                           {pricing.weeklyCoins} coins
                         </span>
+                        <span className="text-xs text-[#9CA3AF] ml-1">(distributed weekly after subscription payment)</span>
                       </span>
                     </div>
 
@@ -311,7 +331,7 @@ export default function ManageSubscriptionPage({ onBack, onNavigate }: ManageSub
                       <CreditCard className="size-4 text-blue-600" />
                       <span className="text-[#6B7280]">
                         Amount: <span className="font-semibold text-[#111827]">
-                          {subscription ? formatAmount(subscription.amount, subscription.currency) : 'N/A'}
+                          {subscription?.amount != null ? formatAmount(subscription.amount, subscription.currency) : 'N/A'}
                         </span>
                       </span>
                     </div>
@@ -423,7 +443,7 @@ export default function ManageSubscriptionPage({ onBack, onNavigate }: ManageSub
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <p className="font-semibold text-[#111827]">
-                        {formatAmount(payment.amount, payment.currency)}
+                        {payment.amount != null ? formatAmount(payment.amount, payment.currency) : 'N/A'}
                       </p>
                       {getStatusBadge(payment.payment_status)}
                     </div>
@@ -466,7 +486,7 @@ export default function ManageSubscriptionPage({ onBack, onNavigate }: ManageSub
                     </div>
                     <p className="text-sm text-[#6B7280] mb-1">{invoice.description}</p>
                     <p className="text-xs text-[#6B7280]">
-                      {formatDate(invoice.created_at)} • {formatAmount(invoice.amount, invoice.currency)}
+                      {formatDate(invoice.created_at)} • {invoice.amount != null ? formatAmount(invoice.amount, invoice.currency) : 'N/A'}
                     </p>
                   </div>
                   <button className="size-10 rounded-full bg-blue-100 flex items-center justify-center hover:bg-blue-200 transition-colors">

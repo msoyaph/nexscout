@@ -23,6 +23,7 @@ import {
   AlertCircle 
 } from 'lucide-react';
 import { aiInstructionsService, type RichImage, type RichFile, type RichContent } from '../services/ai/aiInstructionsService';
+import AiSystemInstructionsEditor from './editor/AiSystemInstructionsEditor';
 
 interface AIInstructionsRichEditorProps {
   userId: string;
@@ -212,24 +213,15 @@ export default function AIInstructionsRichEditor({
         </span>
       </div>
 
-      {/* Main Text Editor */}
+      {/* Main Text Editor - Using Rich Editor */}
       <div>
-        <label className="block text-sm font-semibold text-gray-900 mb-2">
-          Custom AI Instructions
-        </label>
-        <textarea
+        <AiSystemInstructionsEditor
           value={value.text || ''}
-          onChange={(e) => handleTextChange(e.target.value)}
+          onChange={(html) => handleTextChange(html)}
+          label="Custom AI Instructions"
           placeholder={placeholder || "Write your custom AI instructions here...\n\nYou can also insert images and files using the buttons above."}
-          className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 font-mono text-sm resize-y"
-          style={{ minHeight: '250px', maxHeight: '500px' }}
-          rows={Math.max(10, Math.ceil((value.text?.length || 0) / 80))}
+          userId={userId}
         />
-        <div className="flex items-center justify-between mt-2">
-          <p className="text-xs text-gray-500">
-            {(value.text || '').length} characters
-          </p>
-        </div>
       </div>
 
       {/* Inserted Images Preview */}

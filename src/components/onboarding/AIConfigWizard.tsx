@@ -9,6 +9,7 @@ import { useState, useEffect } from 'react';
 import { Sparkles, Phone, Mail, ChevronLeft, ChevronRight, Check, Zap, Building2, MessageCircle, Settings, LogOut } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import AiSystemInstructionsEditor from '../editor/AiSystemInstructionsEditor';
 
 interface AIConfigWizardProps {
   userId: string;
@@ -586,16 +587,14 @@ ${autoSettings.microCTAs.join('\n')}`;
 
                   {/* Modal Body - Editor */}
                   <div className="flex-1 overflow-y-auto p-6">
-                    <textarea
+                    <AiSystemInstructionsEditor
                       value={editableInstructions}
-                      onChange={(e) => setEditableInstructions(e.target.value)}
-                      className="w-full h-full min-h-[400px] px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-sm"
+                      onChange={setEditableInstructions}
+                      label="AI System Instructions"
+                      helperText="Tip: You can format text, add images, attach files, and embed YouTube videos."
                       placeholder="Enter AI system instructions..."
+                      userId={userId}
                     />
-                    <div className="mt-2 flex justify-between items-center text-xs text-gray-500">
-                      <span>{editableInstructions.length.toLocaleString()} characters</span>
-                      <span>{Math.ceil(editableInstructions.length / 4)} tokens (approx)</span>
-                    </div>
                   </div>
 
                   {/* Modal Footer */}
@@ -703,7 +702,7 @@ ${autoSettings.microCTAs.join('\n')}`;
 
 // Helper Functions
 function getToneFromIndustry(industry: string): string {
-  const taglishIndustries = ['mlm', 'MLM / Network Marketing', 'Health & Wellness'];
+  const taglishIndustries = ['mlm', 'MLM / Network Marketing', 'Health & Wellness', 'ecommerce', 'dropshipping', 'direct_selling'];
   return taglishIndustries.some(i => industry.toLowerCase().includes(i.toLowerCase())) 
     ? 'taglish' 
     : 'professional';
@@ -740,8 +739,38 @@ function getDefaultMicroCTAs(industry: string): string[] {
       '"May promo kami ngayon — interested ka?"',
       '"Join our team! Training and support kami."',
     ],
+    'ecommerce': [
+      '"Ready to order? COD or GCash available!"',
+      '"Check mo po yung products - may promo ngayon!"',
+      '"Magkano total? Shipping included na!"',
+      '"Ilang days delivery? 2-3 days lang!"',
+      '"Gusto mo i-add to cart?"',
+      '"COD po or GCash ang payment?"',
+    ],
+    'insurance': [
+      '"Free consultation call po - I can assess your needs."',
+      '"I can prepare a personalized quote for you."',
+      '"What coverage amount are you looking for?"',
+      '"Family protection, health, or education plan?"',
+      '"Comfortable premium range monthly?"',
+    ],
+    'real_estate': [
+      '"I can show you properties in your price range."',
+      '"Free property consultation - available for a call?"',
+      '"When can we schedule a property viewing?"',
+      '"Interested in financing options?"',
+      '"Reserve now and secure your investment."',
+    ],
   };
 
-  return ctas[industry] || ctas['mlm'];
+  // Match by key or partial match
+  const industryLower = industry.toLowerCase();
+  for (const [key, value] of Object.entries(ctas)) {
+    if (industryLower.includes(key.toLowerCase()) || key.toLowerCase().includes(industryLower)) {
+      return value;
+    }
+  }
+
+  return ctas['mlm']; // Default fallback
 }
 

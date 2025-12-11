@@ -253,11 +253,11 @@ ${hasPromo ? '🔥 May special promo kami ngayon!\n\n' : ''}If gusto n'yo po mak
 
 ✅ FDA-registered
 ✅ Thousands of satisfied customers
-✅ 100% satisfaction guarantee
+✅ Proven results and customer support
 ✅ Transparent ingredients
 ✅ Full customer support
 
-Plus, you can try it risk-free with our money-back guarantee!
+Plus, you can cancel anytime if it doesn't work for you!
 
 Ready na po ba kayong i-try? 😊`;
 

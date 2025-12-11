@@ -3,10 +3,13 @@
  *
  * Detects and handles objections with pre-crafted Filipino rebuttals
  * Empathetic, persuasive, and strategic
+ * 
+ * UPDATED: Industry-isolated objection handling to prevent cross-industry leakage
  */
 
 import type { UserIntent } from '../messaging/intentRouter';
 import objectionHandlers from '../sequences/objection-handlers.json';
+import type { Industry } from '../../config/scout/industryWeights';
 
 export type ObjectionType =
   | "price"
@@ -77,34 +80,89 @@ export function detectObjection(message: string): ObjectionType {
 
 /**
  * Get rebuttal for objection
+ * @param objectionType - Type of objection
+ * @param activeIndustry - Active industry (for industry-specific rebuttals)
  */
-export function getObjectionRebuttal(objectionType: ObjectionType): string {
+export function getObjectionRebuttal(objectionType: ObjectionType, activeIndustry?: Industry): string {
   const handlers = objectionHandlers as Record<ObjectionType, string[]>;
+  
+  // If industry-specific handlers exist, use them; otherwise fall back to generic
+  // Note: Current objection-handlers.json is generic, but structure supports industry-specific expansion
   const rebuttals = handlers[objectionType];
 
   if (!rebuttals || rebuttals.length === 0) {
-    return "I understand your concern po. Let me help address that for you 😊";
+    // Industry-specific fallback messages
+    const fallbackByIndustry: Record<Industry, string> = {
+      mlm: "I understand your concern po. Let me help address that for you 😊",
+      insurance: "I understand your concern. Let me help you find the best solution for your needs.",
+      real_estate: "I understand your concern. Let me address that and show you how we can work around it.",
+      ecommerce: "Gets ko yung concern mo! Let me help you find the best option for you 😊",
+      direct_selling: "I understand your concern po. Let me help address that for you 😊",
+    };
+    
+    return activeIndustry 
+      ? (fallbackByIndustry[activeIndustry] || fallbackByIndustry.mlm)
+      : "I understand your concern po. Let me help address that for you 😊";
   }
 
-  // Return random rebuttal
+  // Return random rebuttal (filtered by industry if industry-specific handlers exist)
   return rebuttals[Math.floor(Math.random() * rebuttals.length)];
 }
 
 /**
  * Detect objection with full analysis
+ * @param message - User message to analyze
+ * @param intent - User intent context
+ * @param activeIndustry - Active industry for industry-specific strategies
  */
-export function detectObjectionWithAnalysis(message: string, intent: UserIntent): ObjectionDetectionResult {
+export function detectObjectionWithAnalysis(
+  message: string, 
+  intent: UserIntent,
+  activeIndustry?: Industry
+): ObjectionDetectionResult {
   const objectionType = detectObjection(message);
   const m = message.toLowerCase();
 
   let confidence = 0.7;
   let strategy = '';
 
+  // Industry-specific strategies
+  const strategiesByIndustry: Partial<Record<Industry, Record<ObjectionType, string>>> = {
+    mlm: {
+      price: "Focus on VALUE not price. Show ROI potential, break down daily cost, highlight income opportunity.",
+      tooExpensive: "Emphasize low starter cost, installment options, and value proposition.",
+      timing: "Acknowledge timing. Ask WHEN is better. Offer to follow up. Mention opportunity window.",
+      spouse: "Offer info packet for spouse, success stories, or invite couple to orientation.",
+    },
+    insurance: {
+      price: "Break down coverage value vs. cost. Show long-term benefits and flexible payment plans.",
+      tooExpensive: "Discuss different coverage tiers and payment options (monthly, quarterly, annual).",
+      timing: "Discuss urgency of protection. 'Better safe than sorry' - but no pressure.",
+      spouse: "Offer comprehensive proposal they can review together, including benefits breakdown.",
+    },
+    real_estate: {
+      price: "Show financing options, payment plans, investment value, and appreciation potential.",
+      tooExpensive: "Discuss bank financing, in-house payment plans, and property value over time.",
+      timing: "Discuss market timing, property availability, and early bird discounts if applicable.",
+      spouse: "Offer property viewing together, comprehensive portfolio, and financing consultation.",
+    },
+    ecommerce: {
+      price: "Highlight product value, promotions, discounts, and bundle deals.",
+      tooExpensive: "Offer COD, installment via GCash, or payment plans if available.",
+      timing: "Acknowledge timing. Offer to hold item or send reminder when ready.",
+      spouse: "Offer product catalog they can review together, with pricing and payment options.",
+    },
+  };
+
+  // Use industry-specific strategy if available
+  const industryStrategies = activeIndustry ? strategiesByIndustry[activeIndustry] : undefined;
+  const industryStrategy = industryStrategies?.[objectionType];
+
   switch (objectionType) {
     case "price":
     case "tooExpensive":
       confidence = 0.85;
-      strategy = "Focus on VALUE not price. Show ROI, break down daily cost, offer bundles.";
+      strategy = industryStrategy || "Focus on VALUE not price. Show ROI, break down daily cost, offer bundles.";
       break;
 
     case "hesitation":
@@ -114,7 +172,9 @@ export function detectObjectionWithAnalysis(message: string, intent: UserIntent)
 
     case "decisionDelay":
       confidence = 0.8;
-      strategy = "Create soft urgency. Mention limited stocks. Offer to hold reservation.";
+      strategy = activeIndustry === 'ecommerce' 
+        ? "Create soft urgency. Mention limited stock. Offer to hold item for 24 hours."
+        : "Create soft urgency. Mention limited availability. Offer to hold reservation.";
       break;
 
     case "needsMoreInfo":
@@ -124,7 +184,9 @@ export function detectObjectionWithAnalysis(message: string, intent: UserIntent)
 
     case "skepticism":
       confidence = 0.85;
-      strategy = "Build TRUST. Show testimonials, guarantees, FDA registration, reviews.";
+      strategy = activeIndustry === 'mlm' || activeIndustry === 'direct_selling'
+        ? "Build TRUST. Show testimonials, certifications, FDA registration, reviews, proven results."
+        : "Build TRUST. Show testimonials, certifications, reviews, proven results.";
       break;
 
     case "competition":
@@ -134,7 +196,7 @@ export function detectObjectionWithAnalysis(message: string, intent: UserIntent)
 
     case "timing":
       confidence = 0.75;
-      strategy = "Acknowledge timing. Ask WHEN is better. Offer to follow up. Create urgency gently.";
+      strategy = industryStrategy || "Acknowledge timing. Ask WHEN is better. Offer to follow up. Create urgency gently.";
       break;
 
     default:
@@ -147,7 +209,7 @@ export function detectObjectionWithAnalysis(message: string, intent: UserIntent)
     confidence = Math.min(confidence + 0.1, 1.0);
   }
 
-  const rebuttal = getObjectionRebuttal(objectionType);
+  const rebuttal = getObjectionRebuttal(objectionType, activeIndustry);
 
   return {
     objectionType,
@@ -163,11 +225,11 @@ export function detectObjectionWithAnalysis(message: string, intent: UserIntent)
 export function getObjectionStrategy(objectionType: ObjectionType): string {
   const strategies: Record<ObjectionType, string> = {
     price: "VALUE OVER PRICE: Show ROI, daily cost breakdown, compare to alternatives, bundle savings",
-    tooExpensive: "ANCHOR VALUE: Social proof, results, satisfaction guarantee, payment plans",
+      tooExpensive: "ANCHOR VALUE: Social proof, results, testimonials, payment plans",
     hesitation: "QUALIFY DEEPER: Ask questions, find root concern, address specifically, soften close",
     decisionDelay: "CREATE URGENCY: Limited stocks, promo ending, reservation option, FOMO gently",
     needsMoreInfo: "EDUCATE CONCISELY: Answer specific question, provide proof, ask if clear",
-    skepticism: "BUILD TRUST: Testimonials, guarantees, FDA/certs, reviews, transparent process",
+    skepticism: "BUILD TRUST: Testimonials, certifications, FDA/certs, reviews, proven results, transparent process",
     competition: "DIFFERENTIATE: Unique benefits, customer success, quality focus, don't bash others",
     timing: "SCHEDULE FOLLOW-UP: Acknowledge timing, ask when better, offer reminder, gentle urgency",
     none: "GENERAL EMPATHY: Listen, understand, ask qualifying questions"

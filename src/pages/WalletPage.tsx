@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { ArrowLeft, Wallet, TrendingUp, Clock, Home, Users, MoreHorizontal, Check, MessageSquare, Crown, Share2, ChevronDown, ChevronUp, Search, Filter, X, Copy } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { ArrowLeft, Wallet, TrendingUp, Clock, Home, Users, MoreHorizontal, Check, MessageSquare, Crown, Share2, ChevronDown, ChevronUp, Search, Filter, X, Copy, Video, PlayCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { walletService, CoinTransaction } from '../services/walletService';
 import { supabase } from '../lib/supabase';
@@ -7,6 +7,7 @@ import SlideInMenu from '../components/SlideInMenu';
 import ActionPopup from '../components/ActionPopup';
 import NotificationBadge from '../components/NotificationBadge';
 import { useNotificationCounts } from '../hooks/useNotificationCounts';
+import AdPlayer from '../components/AdPlayer';
 
 interface WalletPageProps {
   onBack: () => void;
@@ -27,6 +28,9 @@ export default function WalletPage({ onBack, onNavigateToPurchase, onNavigate, o
   const [copiedReferralLink, setCopiedReferralLink] = useState(false);
   const [customUserId, setCustomUserId] = useState<string>('');
   const [copiedMainReferralLink, setCopiedMainReferralLink] = useState(false);
+  const [adsWatchedToday, setAdsWatchedToday] = useState(0);
+  const [showAdPlayer, setShowAdPlayer] = useState(false);
+  const isProcessingAdRef = useRef(false); // Prevent double processing of ad rewards
   
   // Filters
   const [typeFilter, setTypeFilter] = useState<'all' | 'earned' | 'spent' | 'purchased' | 'bonus' | 'ad_reward'>('all');
@@ -146,6 +150,25 @@ export default function WalletPage({ onBack, onNavigateToPurchase, onNavigate, o
           console.error('Error loading custom user ID:', error);
         }
       }
+
+      // Load ads watched today (all users can watch ads)
+      if (user?.id) {
+        try {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          
+          const { data: adTransactions } = await supabase
+            .from('coin_transactions')
+            .select('created_at')
+            .eq('user_id', user.id)
+            .eq('transaction_type', 'ad_reward')
+            .gte('created_at', today.toISOString());
+          
+          setAdsWatchedToday(adTransactions?.length || 0);
+        } catch (error) {
+          console.error('Error loading ads watched today:', error);
+        }
+      }
     } catch (error) {
       console.error('Error loading wallet data:', error);
       // Don't crash the whole page
@@ -156,10 +179,59 @@ export default function WalletPage({ onBack, onNavigateToPurchase, onNavigate, o
 
   // Removed: handleConvertToEnergy (coin-to-energy conversion deprecated)
 
+  const handleAdComplete = async () => {
+    if (!user?.id || !profile?.id) return;
+
+    // Prevent double calls - guard with ref
+    if (isProcessingAdRef.current) {
+      console.warn('[WalletPage] Ad completion already processing, ignoring duplicate call');
+      return;
+    }
+
+    // Mark as processing immediately
+    isProcessingAdRef.current = true;
+
+    try {
+      // Immediately close ad player to prevent multiple clicks
+      setShowAdPlayer(false);
+
+      // Record coin transaction (4 coins per ad)
+      const success = await walletService.recordTransaction(
+        profile.id,
+        4,
+        'ad_reward',
+        'Watched video advertisement'
+      );
+
+      if (success) {
+        const newCount = adsWatchedToday + 1;
+        setAdsWatchedToday(newCount);
+        await refreshProfile();
+        await loadWalletData();
+        alert(`🎉 You earned 4 coins! (${newCount}/3 ads today)`);
+      } else {
+        alert('Failed to record coin transaction. Please try again.');
+        // Reset processing flag on failure so user can retry
+        isProcessingAdRef.current = false;
+      }
+    } catch (error) {
+      console.error('Error completing ad:', error);
+      alert('Failed to award coins. Please try again.');
+      // Reset processing flag on error so user can retry
+      isProcessingAdRef.current = false;
+    } finally {
+      // Reset processing flag after a short delay to allow state updates
+      setTimeout(() => {
+        isProcessingAdRef.current = false;
+      }, 1000);
+    }
+  };
+
   const handleCopyReferralLink = () => {
-    if (!ambassadorData?.referral_code) return;
+    // Use the same referral link format as the main referral link (unified system)
+    if (!customUserId) return;
     
-    const referralLink = `${window.location.origin}/signup?ref=${ambassadorData.referral_code}`;
+    const referralLink = `${window.location.origin}/ref/${customUserId}`;
     navigator.clipboard.writeText(referralLink);
     setCopiedReferralLink(true);
     setTimeout(() => setCopiedReferralLink(false), 2000);
@@ -429,16 +501,17 @@ export default function WalletPage({ onBack, onNavigateToPurchase, onNavigate, o
               </div>
 
               {/* Referral Link (If Already a Referral Boss/Ambassador) */}
-              {ambassadorData?.referral_code && (
+              {ambassadorData && customUserId && (
                 <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 mb-3">
                   <p className="text-xs text-white/80 mb-2 font-semibold">📱 Your Referral Link</p>
                   <div className="flex items-center gap-2">
                     <code className="flex-1 bg-white/20 px-3 py-2 rounded text-xs font-mono text-white truncate">
-                      {window.location.origin}/signup?ref={ambassadorData.referral_code}
+                      {window.location.origin}/ref/{customUserId}
                     </code>
                     <button
                       onClick={handleCopyReferralLink}
                       className="p-2 bg-white/20 hover:bg-white/30 rounded transition-colors shrink-0"
+                      disabled={!customUserId}
                     >
                       {copiedReferralLink ? (
                         <Check className="w-4 h-4 text-green-300" />
@@ -450,6 +523,7 @@ export default function WalletPage({ onBack, onNavigateToPurchase, onNavigate, o
                   {copiedReferralLink && (
                     <p className="text-xs text-green-300 mt-2 animate-fade-in">✅ Link copied! Share it to earn!</p>
                   )}
+                  <p className="text-xs text-white/60 mt-2">💡 Same link as shown above - unified referral system</p>
                 </div>
               )}
 
@@ -472,6 +546,46 @@ export default function WalletPage({ onBack, onNavigateToPurchase, onNavigate, o
               </button>
             </div>
           )}
+        </div>
+
+        {/* Watch Ads to Earn Coins Card */}
+        <div className="bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 rounded-lg shadow-sm border border-purple-200 p-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center flex-shrink-0">
+              <Video className="w-5 h-5 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-semibold text-gray-900 mb-1">Watch Video Ads to Earn Coins</h3>
+              <p className="text-xs text-gray-600 mb-3">
+                Earn <span className="font-semibold text-purple-600">4 coins per ad</span>. Max <span className="font-semibold">3 ads per day</span> = 12 coins daily!
+              </p>
+              <button
+                onClick={() => {
+                  if (adsWatchedToday >= 3) {
+                    alert('You\'ve watched the maximum 3 ads today. Come back tomorrow!');
+                    return;
+                  }
+                  // Reset processing flag when opening new ad
+                  isProcessingAdRef.current = false;
+                  setShowAdPlayer(true);
+                }}
+                disabled={adsWatchedToday >= 3}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg text-sm font-semibold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+              >
+                <PlayCircle className="w-4 h-4" />
+                <span>
+                  {adsWatchedToday >= 3 
+                    ? 'Daily Limit Reached' 
+                    : `Watch Ad (${adsWatchedToday}/3 today)`}
+                </span>
+              </button>
+              {adsWatchedToday > 0 && (
+                <p className="text-xs text-gray-500 mt-2 text-center">
+                  Earned {adsWatchedToday * 4} coins today from ads
+                </p>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Recent Activity with Filters */}
@@ -714,6 +828,15 @@ export default function WalletPage({ onBack, onNavigateToPurchase, onNavigate, o
           if (onNavigate) onNavigate(page);
         }}
       />
+
+      {/* Ad Player Modal */}
+      {showAdPlayer && (
+        <AdPlayer
+          onComplete={handleAdComplete}
+          onClose={() => setShowAdPlayer(false)}
+          reward={{ coins: 4 }}
+        />
+      )}
     </div>
   );
 }

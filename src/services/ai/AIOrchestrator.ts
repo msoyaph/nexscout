@@ -112,21 +112,33 @@ class AIOrchestrator {
       // 2. Check energy and select model
       const { model, provider } = await this.selectModelAndProvider(config, userConfig);
       
-      // 3. Check if user has enough energy
+      // 3. Check if user has enough energy (skip for instructions transformation if energy system not available)
       const energyCost = this.calculateEnergyCost(config.action, model);
-      const energyCheck = await energyEngineV5.canPerformAction(config.userId, energyCost);
+      let energyCheck = { canPerform: true, available: 1000, required: energyCost };
       
-      if (!energyCheck.canPerform) {
-        return this.createErrorResponse(
-          `Insufficient energy. Required: ${energyCost}, Available: ${energyCheck.available}`,
-          provider,
-          model,
-          startTime
-        );
+      try {
+        energyCheck = await energyEngineV5.canPerformAction(config.userId, energyCost);
+        
+        if (!energyCheck.canPerform) {
+          return this.createErrorResponse(
+            `Insufficient energy. Required: ${energyCost}, Available: ${energyCheck.available}`,
+            provider,
+            model,
+            startTime
+          );
+        }
+      } catch (energyError) {
+        // Energy system may not be fully configured - log but continue
+        console.warn('[AIOrchestrator] Energy check failed, proceeding anyway:', energyError);
       }
       
-      // 4. Consume energy
-      await energyEngineV5.consumeEnergy(config.userId, energyCost, config.action);
+      // 4. Consume energy (gracefully handle failures)
+      try {
+        await energyEngineV5.consumeEnergy(config.userId, energyCost, config.action);
+      } catch (energyError) {
+        // Energy consumption failed - log but continue (don't block AI generation)
+        console.warn('[AIOrchestrator] Energy consumption failed, proceeding anyway:', energyError);
+      }
       
       // 5. Make AI API call with retry logic
       const result = await this.callAI(messages, model, provider, config);
@@ -344,29 +356,74 @@ class AIOrchestrator {
     }
     
     // Call through edge function (which has the API key)
-    const response = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-ai-content`,
-      {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    if (!supabaseUrl) {
+      throw new Error('VITE_SUPABASE_URL is not configured');
+    }
+
+    const edgeFunctionUrl = `${supabaseUrl}/functions/v1/generate-ai-content`;
+    
+    let response: Response;
+    try {
+      response = await fetch(edgeFunctionUrl, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || '',
         },
         body: JSON.stringify({
           messages,
           model,
           temperature: config.temperature || 0.7,
           max_tokens: config.maxTokens || 1000,
-          workspaceId: config.workspaceId,
-          prospectId: config.prospectId,
+          workspaceId: config.workspaceId || null,
+          prospectId: config.prospectId || null, // Optional - not required for instructions transformation
           generationType: config.action,
+          // For instructions transformation, indicate this is not prospect-specific
+          skipProspectValidation: config.action === 'ai_chatbot_response' && !config.prospectId,
+          // CRITICAL: Skip coin check if coins were already deducted or will be deducted separately
+          // This prevents the edge function from deducting coins per AI call
+          skipCoinCheck: config.skipCoinCheck || false,
+          coinCost: config.coinCost || 0, // Tell edge function coins already deducted (0 = no deduction)
+          transactionId: config.transactionId || null, // Transaction ID for deduplication
         }),
-      }
-    );
+      });
+    } catch (fetchError) {
+      // Network error - edge function may not be deployed or accessible
+      console.error('[AIOrchestrator] Fetch error:', fetchError);
+      throw new Error(
+        `Failed to connect to AI service. The edge function "generate-ai-content" may not be deployed or accessible. ` +
+        `Please ensure: 1) The edge function is deployed, 2) VITE_SUPABASE_URL is configured correctly, 3) You have internet connectivity.`
+      );
+    }
     
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || `OpenAI API error: ${response.status}`);
+      let errorMessage = `OpenAI API error: ${response.status}`;
+      try {
+        const error = await response.json();
+        errorMessage = error.error || error.message || errorMessage;
+        
+        // Handle coin-related errors
+        if (response.status === 402 || errorMessage.toLowerCase().includes('insufficient coins') || errorMessage.toLowerCase().includes('payment required')) {
+          if (config.skipCoinCheck) {
+            // If we set skipCoinCheck but still got coin error, the edge function might not support it
+            console.warn('[AIOrchestrator] Edge function returned coin error despite skipCoinCheck flag. Edge function may need to be updated to support skipCoinCheck.');
+            errorMessage = 'The AI service encountered a coin check error. If coins were already deducted, please contact support. Otherwise, ensure you have sufficient coins.';
+          } else {
+            errorMessage = 'Insufficient coins. Please purchase more coins to continue.';
+          }
+        }
+        
+        // Handle "Prospect not found" error for instructions transformation
+        if (errorMessage.includes('Prospect not found') && !config.prospectId) {
+          errorMessage = 'The AI service requires a prospect context, but this operation is for general AI System Instructions. Please use this feature from a prospect-specific context, or contact support to enable instructions transformation without prospect context.';
+        }
+      } catch {
+        // If response is not JSON, use status text
+        errorMessage = response.statusText || errorMessage;
+      }
+      throw new Error(errorMessage);
     }
     
     const result = await response.json();

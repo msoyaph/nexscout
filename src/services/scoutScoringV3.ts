@@ -1,322 +1,229 @@
+/**
+ * ScoutScore V3 - CTA / Click Tracking & Conversion Heat Scoring
+ * NEW IMPLEMENTATION: Tracks user interactions with CTAs, links, messages
+ */
 import { supabase } from '../lib/supabase';
-import { PainPointProfile } from './painPointClassifierPH';
-import { SocialGraphBuilder } from './socialGraphBuilder';
 
-export interface ProspectSignals {
-  engagementScore: number;
-  businessInterestScore: number;
-  lifeEventScore: number;
-  responsivenessScore: number;
-  leadershipScore: number;
-  relationshipScore: number;
-  mutualFriendsCount?: number;
-  painProfile?: PainPointProfile;
-  socialRelationshipScore?: number;
-  socialTrustSignal?: number;
+export type CTAEventType = 
+  | 'cta_clicked'
+  | 'link_opened'
+  | 'message_seen'
+  | 'form_started'
+  | 'form_submitted'
+  | 'offer_viewed'
+  | 'document_opened'
+  | 'video_played';
+
+export interface CTAEvent {
+  type: CTAEventType;
+  timestamp: string;
+  metadata?: Record<string, any>;
 }
 
-export interface ScoutScoreV3Result {
+export interface CTAHeatScoreInput {
   prospectId: string;
-  score: number;
-  bucket: 'hot' | 'warm' | 'cold';
-  explanationTags: string[];
-  scoreVersion: string;
-  breakdown: {
-    engagement: number;
-    businessInterest: number;
-    painNeed: number;
-    lifeEvent: number;
-    responsiveness: number;
-    leadership: number;
-    socialTrust: number;
-  };
+  userId: string;
+  events?: CTAEvent[]; // Optional: can fetch from DB if not provided
+  windowDays?: number; // How far back to look for events
 }
 
-export class ScoutScoringV3 {
-  private static readonly WEIGHTS = {
-    engagement: 0.16,
-    businessInterest: 0.16,
-    painNeed: 0.14,
-    lifeEvent: 0.12,
-    responsiveness: 0.10,
-    leadership: 0.10,
-    socialRelationship: 0.12,
-    socialTrust: 0.10,
+export interface CTAHeatScoreResult {
+  prospectId: string;
+  userId: string;
+  conversionHeatScore: number; // 0-100
+  intentSignal: string | null;
+  conversionLikelihood: number; // 0-100
+  recommendedCTA: string | null;
+  eventBreakdown: {
+    ctaClicked: number;
+    linkOpened: number;
+    messageSeen: number;
+    formStarted: number;
+    formSubmitted: number;
+    totalEvents: number;
   };
+  insights: string[];
+}
 
-  static calculateScoreV3(signals: ProspectSignals): ScoutScoreV3Result {
-    const socialTrust = signals.socialTrustSignal || this.calculateSocialTrust(signals.mutualFriendsCount || 0);
-    const painNeed = this.calculatePainNeed(signals.painProfile);
-    const socialRelationship = signals.socialRelationshipScore || this.calculateSocialTrust(signals.mutualFriendsCount || 0);
+const EVENT_WEIGHTS: Record<CTAEventType, number> = {
+  cta_clicked: 40,
+  link_opened: 25,
+  message_seen: 10,
+  form_started: 30,
+  form_submitted: 60,
+  offer_viewed: 20,
+  document_opened: 15,
+  video_played: 35,
+};
 
-    const breakdown = {
-      engagement: signals.engagementScore || 0,
-      businessInterest: signals.businessInterestScore || 0,
-      painNeed,
-      lifeEvent: signals.lifeEventScore || 0,
-      responsiveness: signals.responsivenessScore || 0,
-      leadership: signals.leadershipScore || 0,
-      socialTrust,
-      socialRelationship,
-    };
+export class ScoutScoringV3Engine {
+  async calculateCTAHeatScore(input: CTAHeatScoreInput): Promise<CTAHeatScoreResult> {
+    const windowDays = input.windowDays || 30;
+    const events = input.events || await this.fetchCTAEvents(input.prospectId, input.userId, windowDays);
 
-    const score =
-      this.WEIGHTS.engagement * breakdown.engagement +
-      this.WEIGHTS.businessInterest * breakdown.businessInterest +
-      this.WEIGHTS.painNeed * breakdown.painNeed +
-      this.WEIGHTS.lifeEvent * breakdown.lifeEvent +
-      this.WEIGHTS.responsiveness * breakdown.responsiveness +
-      this.WEIGHTS.leadership * breakdown.leadership +
-      this.WEIGHTS.socialRelationship * breakdown.socialRelationship +
-      this.WEIGHTS.socialTrust * breakdown.socialTrust;
+    // Calculate base heat score from events
+    const conversionHeatScore = this.calculateHeatScore(events);
 
-    const finalScore = Math.min(Math.max(score, 0), 100);
-
-    const bucket = this.determineBucket(finalScore);
-
-    const explanationTags = this.generateExplanationTags(signals, breakdown);
+    // Generate insights and recommendations
+    const eventBreakdown = this.breakdownEvents(events);
+    const intentSignal = this.determineIntentSignal(eventBreakdown);
+    const conversionLikelihood = this.mapHeatToLikelihood(conversionHeatScore);
+    const recommendedCTA = this.generateRecommendedCTA(conversionHeatScore, eventBreakdown);
+    const insights = this.generateInsights(eventBreakdown, conversionHeatScore);
 
     return {
-      prospectId: '',
-      score: Math.round(finalScore),
-      bucket,
-      explanationTags,
-      scoreVersion: 'v3',
-      breakdown,
+      prospectId: input.prospectId,
+      userId: input.userId,
+      conversionHeatScore,
+      intentSignal,
+      conversionLikelihood,
+      recommendedCTA,
+      eventBreakdown,
+      insights,
     };
   }
 
-  private static calculateSocialTrust(mutualFriendsCount: number): number {
-    return Math.min((mutualFriendsCount / 200) * 100, 100);
-  }
+  private async fetchCTAEvents(
+    prospectId: string,
+    userId: string,
+    windowDays: number
+  ): Promise<CTAEvent[]> {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - windowDays);
 
-  private static calculatePainNeed(painProfile?: PainPointProfile): number {
-    if (!painProfile || !painProfile.categories) {
-      return 0;
-    }
-
-    const scores = Object.values(painProfile.categories);
-    return scores.length > 0 ? Math.max(...scores) : 0;
-  }
-
-  private static determineBucket(score: number): 'hot' | 'warm' | 'cold' {
-    if (score >= 80) return 'hot';
-    if (score >= 50) return 'warm';
-    return 'cold';
-  }
-
-  private static generateExplanationTags(
-    signals: ProspectSignals,
-    breakdown: any
-  ): string[] {
-    const tags: string[] = [];
-
-    if (breakdown.socialRelationship >= 70) {
-      tags.push('🫂 Strong relationship on social media');
-    }
-
-    if (signals.socialTrustSignal && signals.socialTrustSignal >= 60) {
-      tags.push('👀 Frequently engages with your posts');
-    }
-
-    if (breakdown.socialRelationship >= 50 && breakdown.socialTrust >= 50) {
-      tags.push('💬 Has commented on your content recently');
-    }
-
-    if (breakdown.socialRelationship < 30 && breakdown.socialTrust < 30) {
-      tags.push('🧊 Very little interaction on social media');
-    }
-
-    if ((signals.mutualFriendsCount || 0) >= 50) {
-      tags.push('👥 High mutual trust');
-    }
-
-    if (breakdown.painNeed >= 70) {
-      tags.push('💸 Strong financial need');
-    }
-
-    if (signals.painProfile?.dominantCategory === 'open_for_opportunities') {
-      tags.push('🔎 Open for opportunities');
-    }
-
-    if (breakdown.businessInterest >= 75) {
-      tags.push('💼 Strong business interest');
-    }
-
-    if (breakdown.engagement >= 75) {
-      tags.push('🔥 Highly engaged');
-    }
-
-    if (breakdown.leadership >= 70) {
-      tags.push('👑 Leadership potential');
-    }
-
-    if (breakdown.socialTrust >= 60) {
-      tags.push('🤝 Strong network connection');
-    }
-
-    if (signals.painProfile?.dominantCategory === 'looking_for_extra_income') {
-      tags.push('💰 Looking for extra income');
-    }
-
-    if (signals.painProfile?.dominantCategory === 'financial_struggle') {
-      tags.push('💸 Financial struggle detected');
-    }
-
-    if (signals.painProfile?.dominantCategory === 'business_minded_but_stuck') {
-      tags.push('🚀 Business-minded');
-    }
-
-    return tags;
-  }
-
-  static async scoreProspectsForScanV3(scanId: string): Promise<void> {
-    const { data: items, error } = await supabase
-      .from('scan_processed_items')
-      .select('*')
-      .eq('scan_id', scanId);
-
-    if (error || !items) {
-      console.error('Failed to fetch scan items:', error);
-      return;
-    }
-
-    const prospectMap = new Map<string, any>();
-
-    for (const item of items) {
-      const name = item.name || 'unknown';
-      if (!prospectMap.has(name)) {
-        prospectMap.set(name, {
-          id: item.id,
-          name,
-          mutualFriends: 0,
-          posts: [],
-          metadata: item.metadata || {},
-        });
-      }
-
-      const prospect = prospectMap.get(name);
-
-      if (item.metadata?.mutual_friends) {
-        prospect.mutualFriends = Math.max(
-          prospect.mutualFriends,
-          item.metadata.mutual_friends
-        );
-      }
-
-      if (item.type === 'post') {
-        prospect.posts.push(item.content);
-      }
-    }
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    for (const [name, prospect] of prospectMap.entries()) {
-      await SocialGraphBuilder.enrichProspectFromSocialGraph(user.id, prospect.id);
-
-      const { data: painProfile } = await supabase
-        .from('prospect_pain_profiles')
+      // Query prospect events table for CTA-related events
+      // This assumes events are stored with event_type and metadata
+      const { data: events, error } = await supabase
+        .from('prospect_events')
         .select('*')
-        .eq('prospect_id', prospect.id)
-        .maybeSingle();
+        .eq('prospect_id', prospectId)
+        .eq('user_id', userId)
+        .gte('created_at', cutoffDate.toISOString())
+        .in('event_name', [
+          'cta_clicked',
+          'link_opened',
+          'message_seen',
+          'form_started',
+          'form_submitted',
+          'offer_viewed',
+          'document_opened',
+          'video_played'
+        ])
+        .order('created_at', { ascending: false });
 
-      const updatedMetadata = prospect.metadata;
-
-      const signals: ProspectSignals = {
-        engagementScore: this.calculateEngagement(prospect.posts),
-        businessInterestScore: this.calculateBusinessInterest(updatedMetadata),
-        lifeEventScore: this.calculateLifeEvent(updatedMetadata),
-        responsivenessScore: 50,
-        leadershipScore: this.calculateLeadership(updatedMetadata),
-        relationshipScore: 50,
-        mutualFriendsCount: prospect.mutualFriends,
-        socialRelationshipScore: updatedMetadata.social_relationship_score,
-        socialTrustSignal: updatedMetadata.social_trust_signal,
-        painProfile: painProfile
-          ? {
-              categories: painProfile.categories,
-              dominantCategory: painProfile.dominant_category,
-              hasStrongSignal: painProfile.has_strong_signal,
-            }
-          : undefined,
-      };
-
-      const scoreResult = this.calculateScoreV3(signals);
-      scoreResult.prospectId = prospect.id;
-
-      await this.persistScore(scoreResult, scanId);
-    }
-  }
-
-  private static calculateEngagement(posts: string[]): number {
-    const baseScore = Math.min(posts.length * 10, 60);
-
-    const hasRecentActivity = posts.some(p =>
-      p.toLowerCase().includes('hour') || p.toLowerCase().includes('min')
-    );
-
-    return baseScore + (hasRecentActivity ? 20 : 10);
-  }
-
-  private static calculateBusinessInterest(metadata: any): number {
-    let score = 40;
-
-    if (metadata.has_business_interest) score += 30;
-    if (metadata.topics?.includes('business')) score += 15;
-    if (metadata.topics?.includes('entrepreneurship')) score += 15;
-
-    return Math.min(score, 100);
-  }
-
-  private static calculateLifeEvent(metadata: any): number {
-    const lifeEventKeywords = ['wedding', 'graduation', 'new job', 'promotion', 'birthday'];
-
-    let score = 30;
-
-    if (metadata.additional_info) {
-      const info = metadata.additional_info.toLowerCase();
-      for (const keyword of lifeEventKeywords) {
-        if (info.includes(keyword)) {
-          score += 20;
-          break;
-        }
+      if (error) {
+        console.error('Error fetching CTA events:', error);
+        return [];
       }
-    }
 
-    return Math.min(score, 100);
+      return (events || []).map(event => ({
+        type: event.event_name as CTAEventType,
+        timestamp: event.created_at,
+        metadata: event.metadata || {},
+      }));
+    } catch (error) {
+      console.error('Error in fetchCTAEvents:', error);
+      return [];
+    }
   }
 
-  private static calculateLeadership(metadata: any): number {
-    const leadershipTitles = ['ceo', 'founder', 'director', 'manager', 'head', 'vp', 'president'];
+  private calculateHeatScore(events: CTAEvent[]): number {
+    if (events.length === 0) return 0;
 
-    let score = 30;
+    let totalScore = 0;
 
-    if (metadata.additional_info) {
-      const info = metadata.additional_info.toLowerCase();
-      for (const title of leadershipTitles) {
-        if (info.includes(title)) {
-          score += 40;
-          break;
-        }
-      }
-    }
+    events.forEach(event => {
+      const weight = EVENT_WEIGHTS[event.type] || 0;
+      totalScore += weight;
+    });
 
-    return Math.min(score, 100);
+    // Cap at 100, apply diminishing returns for many events
+    const baseScore = Math.min(100, totalScore);
+    
+    // Bonus for multiple different event types (shows diverse engagement)
+    const uniqueEventTypes = new Set(events.map(e => e.type)).size;
+    const diversityBonus = Math.min(10, uniqueEventTypes * 2);
+
+    return Math.min(100, baseScore + diversityBonus);
   }
 
-  private static async persistScore(
-    scoreResult: ScoutScoreV3Result,
-    scanId: string
-  ): Promise<void> {
-    await supabase.from('scan_processed_items').update({
-      score: scoreResult.score,
-      metadata: {
-        score_version: scoreResult.scoreVersion,
-        bucket: scoreResult.bucket,
-        explanation_tags: scoreResult.explanationTags,
-        breakdown: scoreResult.breakdown,
-      },
-    }).eq('id', scoreResult.prospectId);
+  private breakdownEvents(events: CTAEvent[]) {
+    return {
+      ctaClicked: events.filter(e => e.type === 'cta_clicked').length,
+      linkOpened: events.filter(e => e.type === 'link_opened').length,
+      messageSeen: events.filter(e => e.type === 'message_seen').length,
+      formStarted: events.filter(e => e.type === 'form_started').length,
+      formSubmitted: events.filter(e => e.type === 'form_submitted').length,
+      totalEvents: events.length,
+    };
+  }
+
+  private determineIntentSignal(breakdown: ReturnType<typeof this.breakdownEvents>): string | null {
+    if (breakdown.formSubmitted > 0) return 'cta_highly_engaged';
+    if (breakdown.ctaClicked >= 2) return 'cta_engaged';
+    if (breakdown.formStarted > 0) return 'cta_interested';
+    if (breakdown.linkOpened >= 2) return 'link_only';
+    if (breakdown.messageSeen > 0) return 'view_only';
+    return null;
+  }
+
+  private mapHeatToLikelihood(heatScore: number): number {
+    // Linear mapping with slight curve
+    if (heatScore >= 80) return 90;
+    if (heatScore >= 60) return 75;
+    if (heatScore >= 40) return 55;
+    if (heatScore >= 20) return 35;
+    if (heatScore >= 10) return 20;
+    return Math.round(heatScore);
+  }
+
+  private generateRecommendedCTA(
+    heatScore: number,
+    breakdown: ReturnType<typeof this.breakdownEvents>
+  ): string | null {
+    if (breakdown.formSubmitted > 0) return 'send_application_link';
+    if (breakdown.formStarted > 0 && breakdown.formSubmitted === 0) return 'send_offer';
+    if (breakdown.ctaClicked >= 2) return 'offer_call';
+    if (breakdown.linkOpened >= 2) return 'send_offer';
+    if (heatScore >= 60) return 'send_offer';
+    if (heatScore >= 40) return 'send_application_link';
+    if (heatScore >= 20) return 'offer_call';
+    return null;
+  }
+
+  private generateInsights(
+    breakdown: ReturnType<typeof this.breakdownEvents>,
+    heatScore: number
+  ): string[] {
+    const insights: string[] = [];
+
+    if (breakdown.formSubmitted > 0) {
+      insights.push('Form submitted - high conversion intent');
+    }
+
+    if (breakdown.ctaClicked >= 3) {
+      insights.push('Multiple CTA clicks - strong engagement');
+    }
+
+    if (breakdown.linkOpened >= 3) {
+      insights.push('Multiple link opens - actively researching');
+    }
+
+    if (breakdown.formStarted > 0 && breakdown.formSubmitted === 0) {
+      insights.push('Form started but not submitted - follow up needed');
+    }
+
+    if (heatScore >= 70) {
+      insights.push('High conversion heat - ready for closing');
+    } else if (heatScore >= 40) {
+      insights.push('Moderate engagement - continue nurturing');
+    } else if (breakdown.totalEvents === 0) {
+      insights.push('No CTA interactions yet - initial engagement needed');
+    }
+
+    return insights;
   }
 }
+
+export const scoutScoringV3Engine = new ScoutScoringV3Engine();

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { ArrowLeft, MessageCircle, Clock, User, CheckCircle, Settings, Eye, Flame, Thermometer, Snowflake, HelpCircle, Facebook, Mail, MessageSquare as SMS, Phone, Play, Pause, Search, X, RefreshCw, Crown, AlertCircle, Zap, CreditCard } from 'lucide-react';
+import { ArrowLeft, MessageCircle, Clock, User, CheckCircle, Settings, Eye, Flame, Thermometer, Snowflake, HelpCircle, Facebook, Mail, MessageSquare as SMS, Phone, Play, Pause, Search, X, RefreshCw, Crown, AlertCircle, Zap, CreditCard, Plus, Coins, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -34,7 +34,7 @@ interface ChatbotSessionsPageProps {
 }
 
 export default function ChatbotSessionsPage({ onBack, onNavigate }: ChatbotSessionsPageProps) {
-  const { user, profile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [loading, setLoading] = useState(true);
@@ -42,8 +42,13 @@ export default function ChatbotSessionsPage({ onBack, onNavigate }: ChatbotSessi
   
   // Chat limits state
   const [monthlyChatCount, setMonthlyChatCount] = useState(0);
+  const [chatExtensions, setChatExtensions] = useState(0); // Extensions purchased with coins
   const [showPayAsYouGoModal, setShowPayAsYouGoModal] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [showChatLimitModal, setShowChatLimitModal] = useState(false);
+  const [showPricingBreakdown, setShowPricingBreakdown] = useState(false);
+  const [purchasingWithCoins, setPurchasingWithCoins] = useState(false);
+  const [coinsToSpend, setCoinsToSpend] = useState(2);
   
   // Pull-to-refresh state
   const [pullDistance, setPullDistance] = useState(0);
@@ -51,6 +56,10 @@ export default function ChatbotSessionsPage({ onBack, onNavigate }: ChatbotSessi
   const [pullStartY, setPullStartY] = useState(0);
   const [isPulling, setIsPulling] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  
+  // Scroll-based header collapse state
+  const [isScrolledDown, setIsScrolledDown] = useState(false);
+  const [lastScrollTop, setLastScrollTop] = useState(0);
 
   // Chat limits by tier
   const CHAT_LIMITS = {
@@ -59,20 +68,21 @@ export default function ChatbotSessionsPage({ onBack, onNavigate }: ChatbotSessi
   };
 
   const isProUser = profile?.subscription_tier === 'pro';
-  const chatLimit = isProUser ? CHAT_LIMITS.pro : CHAT_LIMITS.free;
+  const baseChatLimit = isProUser ? CHAT_LIMITS.pro : CHAT_LIMITS.free;
+  const effectiveChatLimit = baseChatLimit + chatExtensions; // Base limit + extensions
   const chatUsage = monthlyChatCount;
-  const chatRemaining = Math.max(0, chatLimit - chatUsage);
-  const usagePercentage = Math.min(100, (chatUsage / chatLimit) * 100);
+  const chatRemaining = Math.max(0, effectiveChatLimit - chatUsage);
+  const usagePercentage = effectiveChatLimit > 0 ? Math.min(100, (chatUsage / effectiveChatLimit) * 100) : 0;
   const isNearLimit = usagePercentage >= 80;
   const isVeryNearLimit = usagePercentage >= 90;
   const isCriticalLimit = usagePercentage >= 95;
-  const isOverLimit = chatUsage >= chatLimit;
+  const isOverLimit = chatUsage >= effectiveChatLimit;
   
   // Pay-as-you-grow calculations for Pro users
   const nextBlockInfo = isProUser ? getNextBlockPrice(chatUsage) : null;
   const chatsUntilNextBlock = (() => {
-    if (isProUser && chatUsage < chatLimit) {
-      return chatLimit - chatUsage;
+    if (isProUser && chatUsage < effectiveChatLimit) {
+      return effectiveChatLimit - chatUsage;
     }
     if (isProUser && nextBlockInfo) {
       return nextBlockInfo.nextBlockRange.start - chatUsage;
@@ -85,10 +95,28 @@ export default function ChatbotSessionsPage({ onBack, onNavigate }: ChatbotSessi
       loadSessions();
       loadMonthlyChatCount();
     }
-  }, [user, filter]);
+  }, [user]);
+
+  // Refresh chat count when modal closes (in case user made a conversion)
+  useEffect(() => {
+    if (!showChatLimitModal && user) {
+      console.log('[ChatbotSessionsPage] Modal closed, reloading chat count...');
+      loadMonthlyChatCount();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showChatLimitModal, user]);
+  
+  // Also reload when PayAsYouGo modal closes (for chat purchases)
+  useEffect(() => {
+    if (!showPayAsYouGoModal && user) {
+      console.log('[ChatbotSessionsPage] PayAsYouGo modal closed, reloading chat count...');
+      loadMonthlyChatCount();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showPayAsYouGoModal, user]);
 
 
-  // Load monthly chat session count
+  // Load monthly chat session count (including extensions from coins)
   const loadMonthlyChatCount = async () => {
     if (!user?.id) return;
 
@@ -96,6 +124,7 @@ export default function ChatbotSessionsPage({ onBack, onNavigate }: ChatbotSessi
       const now = new Date();
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
       
+      // Count actual chat sessions
       const { count, error } = await supabase
         .from('public_chat_sessions')
         .select('*', { count: 'exact', head: true })
@@ -104,7 +133,70 @@ export default function ChatbotSessionsPage({ onBack, onNavigate }: ChatbotSessi
         .neq('status', 'archived');
 
       if (error) throw error;
-      setMonthlyChatCount(count || 0);
+      const sessionCount = count || 0;
+
+      // Count chat extensions from coin transactions this month
+      // Look for transactions with description containing "Extended chat limit"
+      // Note: metadata column doesn't exist, so we parse from description only
+      const { data: spendTransactions, error: extError } = await supabase
+        .from('coin_transactions')
+        .select('description, created_at')
+        .eq('user_id', user.id)
+        .eq('transaction_type', 'spend')
+        .gte('created_at', startOfMonth.toISOString());
+
+      if (extError) {
+        console.warn('[ChatbotSessionsPage] Error loading chat extensions:', extError);
+      }
+
+      // Filter for extension transactions (more robust matching)
+      const extensionTransactions = (spendTransactions || []).filter((tx: any) => {
+        const desc = (tx.description || '').toLowerCase();
+        return desc.includes('extended chat limit') || desc.includes('extend chat');
+      });
+
+      console.log('[ChatbotSessionsPage] Found extension transactions:', extensionTransactions.length, extensionTransactions);
+      console.log('[ChatbotSessionsPage] All spend transactions this month:', spendTransactions?.length, spendTransactions);
+
+      // Parse extensions from descriptions (format: "Extended chat limit: +10 chats (2 coins per chat)")
+      const extensionsThisMonth = extensionTransactions.reduce((total, tx: any) => {
+        const desc = tx.description || '';
+        
+        // Pattern 1: "+10 chats" or "+10 chat" (most specific)
+        let match = desc.match(/\+(\d+)\s*chat/i);
+        if (match) {
+          const chats = parseInt(match[1], 10);
+          console.log('[ChatbotSessionsPage] Parsed from description:', chats, 'from:', desc);
+          return total + chats;
+        }
+        
+        // Pattern 2: Just numbers before "chat" (fallback if no + sign)
+        match = desc.match(/(\d+)\s*chat/i);
+        if (match) {
+          const chats = parseInt(match[1], 10);
+          console.log('[ChatbotSessionsPage] Parsed from description (fallback):', chats, 'from:', desc);
+          return total + chats;
+        }
+        
+        console.warn('[ChatbotSessionsPage] Could not parse extension from description:', desc);
+        return total;
+      }, 0);
+
+      console.log('[ChatbotSessionsPage] Total extensions this month:', extensionsThisMonth);
+
+      // The actual count is just sessions (extensions increase the limit, not the count)
+      // But we need to track extensions separately to show the effective limit
+      setMonthlyChatCount(sessionCount);
+      
+      // Store extensions separately for limit calculation
+      const isProUser = profile?.subscription_tier === 'pro';
+      const baseLimit = isProUser ? CHAT_LIMITS.pro : CHAT_LIMITS.free;
+      
+      console.log('[ChatbotSessionsPage] Setting chatExtensions to:', extensionsThisMonth, 'from', extensionTransactions.length, 'transactions');
+      setChatExtensions(extensionsThisMonth);
+      
+      console.log('[ChatbotSessionsPage] Chat limits - Base:', baseLimit, 'Extensions:', extensionsThisMonth, 'Effective:', baseLimit + extensionsThisMonth);
+      console.log('[ChatbotSessionsPage] State will update - chatExtensions:', extensionsThisMonth);
     } catch (error) {
       console.error('Error loading monthly chat count:', error);
     }
@@ -137,26 +229,33 @@ export default function ChatbotSessionsPage({ onBack, onNavigate }: ChatbotSessi
   }, [user]);
 
   const loadSessions = async (isRefresh = false) => {
-    if (isRefresh) {
-      setIsRefreshing(true);
-    } else {
-      setLoading(true);
-    }
-    
-    // Load all sessions (filtering by active/inactive will be done client-side based on 24-hour rule)
-    const { data } = await supabase
-      .from('public_chat_sessions')
-      .select('*')
-      .eq('user_id', user?.id)
-      .neq('status', 'archived')
-      .order('last_message_at', { ascending: false });
+    try {
+      if (isRefresh) {
+        setIsRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+      
+      // Load all sessions (filtering by active/inactive will be done client-side based on 24-hour rule)
+      const { data, error } = await supabase
+        .from('public_chat_sessions')
+        .select('*')
+        .eq('user_id', user?.id)
+        .neq('status', 'archived')
+        .order('last_message_at', { ascending: false });
 
-    setSessions(data || []);
-    
-    if (isRefresh) {
-      setIsRefreshing(false);
-    } else {
-      setLoading(false);
+      if (error) throw error;
+
+      setSessions(data || []);
+    } catch (error) {
+      console.error('Error loading chat sessions:', error);
+      setSessions([]);
+    } finally {
+      if (isRefresh) {
+        setIsRefreshing(false);
+      } else {
+        setLoading(false);
+      }
     }
   };
   
@@ -257,6 +356,33 @@ export default function ChatbotSessionsPage({ onBack, onNavigate }: ChatbotSessi
       document.removeEventListener('mouseup', handleMouseUp);
     };
   }, [isPulling, pullDistance, pullStartY, isRefreshing]);
+
+  // Scroll detection for header collapse
+  useEffect(() => {
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer) return;
+
+    const handleScroll = () => {
+      const currentScrollTop = scrollContainer.scrollTop;
+      const scrollThreshold = 10; // Minimum scroll distance to trigger
+
+      if (currentScrollTop > lastScrollTop && currentScrollTop > scrollThreshold) {
+        // Scrolling down
+        setIsScrolledDown(true);
+      } else if (currentScrollTop < lastScrollTop || currentScrollTop <= scrollThreshold) {
+        // Scrolling up or at top
+        setIsScrolledDown(false);
+      }
+
+      setLastScrollTop(currentScrollTop);
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll);
+    
+    return () => {
+      scrollContainer.removeEventListener('scroll', handleScroll);
+    };
+  }, [lastScrollTop]);
 
   // Real-time filtering based on search query and active/inactive filter
   const filteredSessions = useMemo(() => {
@@ -411,32 +537,54 @@ export default function ChatbotSessionsPage({ onBack, onNavigate }: ChatbotSessi
                 <h1 className="text-xl font-bold text-gray-900">Chats</h1>
               </div>
             </div>
-            <button
-              onClick={() => onNavigate?.('chatbot-settings')}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-              title="Settings"
-            >
-              <Settings className="w-5 h-5 text-gray-600" />
-            </button>
+            <div className="flex items-center gap-2">
+              {isProUser && (
+                <button
+                  onClick={() => setShowChatLimitModal(true)}
+                  className="px-3 py-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-xs font-bold rounded-full hover:from-blue-600 hover:to-blue-700 transition-all flex items-center gap-1.5 shadow-sm"
+                  title="View chat limit details and extend with coins"
+                >
+                  {isOverLimit ? 'Extend Limit' : 'Chat Credits'}
+                </button>
+              )}
+              <button
+                onClick={() => onNavigate?.('chatbot-settings')}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                title="Settings"
+              >
+                <Settings className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Scrollable Content */}
-      <div className="max-w-2xl mx-auto px-4 py-3">
+      <div 
+        className={`max-w-2xl mx-auto px-4 py-3 transition-all duration-300 ease-in-out ${
+          isScrolledDown ? 'opacity-0 -translate-y-full max-h-0 overflow-hidden pb-0' : 'opacity-100 translate-y-0 max-h-none pb-3'
+        }`}
+      >
         {/* Chat Usage Progress Bar */}
         <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
               <div className="flex items-center gap-2">
                 <MessageCircle className="w-4 h-4 text-gray-600" />
-                <span className="font-semibold text-gray-700">
-                  {chatUsage} / {chatLimit} chats this month
+                <span className="font-semibold text-gray-700 text-[0.694rem] leading-tight">
+                  {chatUsage} / {effectiveChatLimit} chats this month
+                  {chatExtensions > 0 && (
+                    <span className="text-[0.555rem] text-green-600 ml-1">(+{chatExtensions} extended)</span>
+                  )}
                 </span>
                 {isProUser && (
-                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-full flex items-center gap-1">
-                    <Crown className="w-3 h-3" />
-                    Pro
-                  </span>
+                  <button
+                    onClick={() => setShowPayAsYouGoModal(true)}
+                    className="size-5 rounded-full bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 transition-colors shadow-sm"
+                    title="Buy additional chats"
+                    aria-label="Buy additional chats"
+                  >
+                    <Plus className="w-3 h-3" />
+                  </button>
                 )}
               </div>
               {!isProUser && (
@@ -446,15 +594,6 @@ export default function ChatbotSessionsPage({ onBack, onNavigate }: ChatbotSessi
                 >
                   <Zap className="w-3 h-3" />
                   Upgrade
-                </button>
-              )}
-              {isProUser && isOverLimit && (
-                <button
-                  onClick={() => setShowPayAsYouGoModal(true)}
-                  className="px-3 py-1 bg-gradient-to-r from-amber-500 to-amber-600 text-white text-xs font-bold rounded-full hover:from-amber-600 hover:to-amber-700 transition-all flex items-center gap-1.5 shadow-sm"
-                >
-                  <CreditCard className="w-3 h-3" />
-                  Buy More
                 </button>
               )}
             </div>
@@ -521,7 +660,11 @@ export default function ChatbotSessionsPage({ onBack, onNavigate }: ChatbotSessi
       </div>
 
       {/* Filter Tabs - Messenger Style */}
-      <div className="bg-white border-b border-gray-200">
+      <div 
+        className={`bg-white border-b border-gray-200 transition-all duration-300 ease-in-out ${
+          isScrolledDown ? 'opacity-0 -translate-y-full max-h-0 overflow-hidden' : 'opacity-100 translate-y-0 max-h-none'
+        }`}
+      >
         <div className="max-w-2xl mx-auto px-4 pb-0">
           <div className="flex gap-1">
             <button
@@ -597,8 +740,11 @@ export default function ChatbotSessionsPage({ onBack, onNavigate }: ChatbotSessi
           style={{ 
             touchAction: 'pan-y',
             overflowY: 'auto',
-            maxHeight: 'calc(100vh - 171px)'
+            maxHeight: isScrolledDown 
+              ? 'calc(100vh - 80px)' // More space when headers collapsed
+              : 'calc(100vh - 171px)' // Normal space when headers visible
           }}
+          className="transition-all duration-300 ease-in-out"
         >
           {loading ? (
           <div className="p-12 text-center">
@@ -850,26 +996,16 @@ export default function ChatbotSessionsPage({ onBack, onNavigate }: ChatbotSessi
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-bold text-gray-900">Buy Additional Chats</h2>
+              <h2 className="text-xl font-bold text-gray-900">Buy Additional Chats</h2>
               <button
                 onClick={() => setShowPayAsYouGoModal(false)}
                 className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                aria-label="Close"
               >
                 <X className="w-5 h-5 text-gray-600" />
               </button>
             </div>
             <div className="space-y-4">
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-semibold text-amber-900 mb-1">You've reached your monthly limit</p>
-                    <p className="text-xs text-amber-700">
-                      You've used {chatUsage} of {chatLimit} chats this month. Purchase additional chats to continue.
-                    </p>
-                  </div>
-                </div>
-              </div>
 
               <div className="space-y-3">
                 <h3 className="font-semibold text-gray-900">Choose a Package</h3>
@@ -971,6 +1107,418 @@ export default function ChatbotSessionsPage({ onBack, onNavigate }: ChatbotSessi
                 >
                   Cancel
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Enhanced Chat Limit Details Modal */}
+      {showChatLimitModal && (
+        <div 
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowChatLimitModal(false);
+            }
+          }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto my-8">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
+              <h2 className="text-xl font-bold text-gray-900">Chat Message Limits</h2>
+              <button
+                onClick={() => setShowChatLimitModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Current Usage Summary */}
+              <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl p-4 border border-blue-200">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-700 mb-1">Current Usage</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {chatUsage} / {effectiveChatLimit} chats
+                      {chatExtensions > 0 && (
+                        <span className="text-sm text-green-600 ml-2">(+{chatExtensions} extended)</span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm text-gray-600 mb-1">Remaining</p>
+                    <p className="text-xl font-bold text-blue-600">{chatRemaining} chats</p>
+                  </div>
+                </div>
+                <div className="w-full h-2 bg-blue-200 rounded-full overflow-hidden mt-3">
+                  <div
+                    className={`h-2 rounded-full transition-all ${
+                      isOverLimit ? 'bg-red-500' : isNearLimit ? 'bg-amber-500' : 'bg-blue-600'
+                    }`}
+                    style={{ width: `${Math.min(100, usagePercentage)}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Plan Details */}
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <Crown className="w-5 h-5 text-blue-600" />
+                  Your Plan: {isProUser ? 'Pro' : 'Free'}
+                </h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Base Monthly Limit:</span>
+                    <span className="font-semibold text-gray-900">{baseChatLimit} chats</span>
+                  </div>
+                  {chatExtensions > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Extensions (Coins):</span>
+                      <span className="font-semibold text-green-600">+{chatExtensions} chats</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between border-t border-gray-200 pt-2">
+                    <span className="text-gray-700 font-semibold">Effective Limit:</span>
+                    <span className="font-bold text-gray-900">{effectiveChatLimit} chats</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Chats Used:</span>
+                    <span className="font-semibold text-gray-900">{chatUsage}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Remaining:</span>
+                    <span className={`font-semibold ${chatRemaining > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {chatRemaining} chats
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Extend with Coins */}
+              <div className="bg-gradient-to-r from-amber-50 to-yellow-50 rounded-xl border border-amber-200 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Coins className="w-5 h-5 text-amber-600" />
+                  <h3 className="font-semibold text-gray-900">Extend Limit with Coins</h3>
+                </div>
+                <p className="text-sm text-gray-700 mb-4">
+                  Convert coins to chat messages: <strong>2 Coins = 1 Chat Visitor Message</strong>
+                </p>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex-1">
+                    <label className="block text-xs font-semibold text-gray-700 mb-2">
+                      Coins to spend (minimum 2):
+                    </label>
+                    <input
+                      type="number"
+                      min="2"
+                      step="2"
+                      value={coinsToSpend}
+                      onChange={(e) => {
+                        const value = Math.max(2, parseInt(e.target.value) || 2);
+                        setCoinsToSpend(value % 2 === 0 ? value : value - 1); // Ensure even numbers
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-xs font-semibold text-gray-700 mb-2">
+                      Chats you'll get:
+                    </label>
+                    <div className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-semibold text-gray-900">
+                      {Math.floor(coinsToSpend / 2)} chats
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-white rounded-lg p-3 mb-4">
+                  <div className="flex items-center justify-between text-sm mb-1">
+                    <span className="text-gray-600">Your coin balance:</span>
+                    <span className="font-semibold text-gray-900">{profile?.coin_balance || 0} coins</span>
+                  </div>
+                  {profile?.coin_balance && profile.coin_balance < coinsToSpend && (
+                    <p className="text-xs text-red-600 mt-1">
+                      Insufficient coins. You need {coinsToSpend - profile.coin_balance} more coins.
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={async () => {
+                    if (!user?.id || !profile) {
+                      alert('Please log in to use this feature.');
+                      return;
+                    }
+
+                    if ((profile.coin_balance || 0) < coinsToSpend) {
+                      alert(`Insufficient coins! You have ${profile.coin_balance || 0} coins but need ${coinsToSpend}.`);
+                      return;
+                    }
+
+                    const chatsToAdd = Math.floor(coinsToSpend / 2);
+                    if (chatsToAdd < 1) {
+                      alert('You need at least 2 coins to get 1 chat.');
+                      return;
+                    }
+
+                    if (!confirm(`Convert ${coinsToSpend} coins to ${chatsToAdd} chat message${chatsToAdd > 1 ? 's' : ''}?`)) {
+                      return;
+                    }
+
+                    setPurchasingWithCoins(true);
+                    try {
+                      // Get current coin balance first
+                      const { data: currentProfile } = await supabase
+                        .from('profiles')
+                        .select('coin_balance')
+                        .eq('id', user.id)
+                        .single();
+
+                      if (!currentProfile) {
+                        throw new Error('Profile not found');
+                      }
+
+                      const currentBalance = currentProfile.coin_balance || 0;
+                      const newCoinBalance = currentBalance - coinsToSpend;
+
+                      if (newCoinBalance < 0) {
+                        throw new Error('Insufficient coins');
+                      }
+
+                      // Deduct coins
+                      const { error: coinError } = await supabase
+                        .from('profiles')
+                        .update({ coin_balance: newCoinBalance })
+                        .eq('id', user.id);
+
+                      if (coinError) throw coinError;
+
+                      // Record transaction with balance_after (required for Wallet Page)
+                      // Store extension info in description for parsing later
+                      const description = `Extended chat limit: +${chatsToAdd} chat${chatsToAdd > 1 ? 's' : ''} (2 coins per chat)`;
+                      
+                      const txData: any = {
+                        user_id: user.id,
+                        amount: -coinsToSpend,
+                        transaction_type: 'spend',
+                        description: description,
+                        balance_after: newCoinBalance,
+                      };
+
+                      // Insert transaction - Wallet Page will show this in recent transactions
+                      const { data: insertedTx, error: txError } = await supabase
+                        .from('coin_transactions')
+                        .insert(txData)
+                        .select()
+                        .single();
+
+                      if (txError) {
+                        console.error('[ChatbotSessionsPage] Transaction insert error:', txError);
+                        // Rollback coin deduction if transaction recording fails
+                        await supabase
+                          .from('profiles')
+                          .update({ coin_balance: currentBalance })
+                          .eq('id', user.id);
+                        throw txError;
+                      }
+
+                      console.log('[ChatbotSessionsPage] Transaction inserted successfully:', insertedTx);
+
+                      // Refresh profile to update coin balance
+                      if (refreshProfile) {
+                        await refreshProfile();
+                      }
+
+                      console.log('[ChatbotSessionsPage] Transaction recorded successfully:', {
+                        description,
+                        chatsToAdd,
+                        coinsToSpend,
+                        newCoinBalance,
+                        insertedTx
+                      });
+
+                      // Force reload to ensure extension is picked up
+                      // Wait a moment for database to propagate
+                      await new Promise(resolve => setTimeout(resolve, 1000));
+                      
+                      // Refresh monthly count (which will now include the extension)
+                      console.log('[ChatbotSessionsPage] Reloading chat count after extension purchase...');
+                      await loadMonthlyChatCount();
+                      
+                      // Reload again after a short delay to ensure state updates
+                      setTimeout(async () => {
+                        console.log('[ChatbotSessionsPage] Second reload of chat count...');
+                        await loadMonthlyChatCount();
+                      }, 500);
+
+                      // Close modal first
+                      setShowChatLimitModal(false);
+                      
+                      // Show success message with updated limit
+                      const newEffectiveLimit = baseChatLimit + chatExtensions + chatsToAdd;
+                      alert(`✅ Success! You've extended your chat limit by ${chatsToAdd} message${chatsToAdd > 1 ? 's' : ''}.\n\n${coinsToSpend} coins deducted. Your new limit is ${newEffectiveLimit} chats this month.\n\nTransaction recorded in your Wallet.`);
+                    } catch (error: any) {
+                      console.error('Error converting coins to chats:', error);
+                      alert(`Failed to convert coins: ${error.message || 'Please try again.'}`);
+                    } finally {
+                      setPurchasingWithCoins(false);
+                    }
+                  }}
+                  disabled={purchasingWithCoins || (profile?.coin_balance || 0) < coinsToSpend || coinsToSpend < 2}
+                  className="w-full py-2.5 bg-amber-600 text-white rounded-lg font-semibold hover:bg-amber-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {purchasingWithCoins ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Coins className="w-4 h-4" />
+                      Convert {coinsToSpend} Coins to {Math.floor(coinsToSpend / 2)} Chat{Math.floor(coinsToSpend / 2) > 1 ? 's' : ''}
+                    </>
+                  )}
+                </button>
+                {(!profile?.coin_balance || profile.coin_balance < coinsToSpend) && (
+                  <button
+                    onClick={() => {
+                      setShowChatLimitModal(false);
+                      onNavigate?.('purchase');
+                    }}
+                    className="w-full mt-2 py-2 border-2 border-amber-600 text-amber-600 rounded-lg font-semibold hover:bg-amber-50 transition-colors"
+                  >
+                    Buy More Coins
+                  </button>
+                )}
+              </div>
+
+              {/* Pay As You Go Option */}
+              {isProUser && (
+                <div className="bg-white rounded-xl border border-gray-200 p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                      <CreditCard className="w-5 h-5 text-blue-600" />
+                      Pay As You Go
+                    </h3>
+                    <button
+                      onClick={() => setShowPricingBreakdown(!showPricingBreakdown)}
+                      className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                    >
+                      {showPricingBreakdown ? (
+                        <>
+                          <span>Hide</span>
+                          <ChevronUp className="w-4 h-4" />
+                        </>
+                      ) : (
+                        <>
+                          <span>View Pricing</span>
+                          <ChevronDown className="w-4 h-4" />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <p className="text-sm text-gray-600 mb-3">
+                    Purchase additional chat blocks when you exceed your monthly limit. Blocks are valid for the current month only.
+                  </p>
+
+                  {showPricingBreakdown && (
+                    <div className="mt-4 space-y-2 border-t border-gray-200 pt-4">
+                      <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-semibold text-gray-900">Base Plan (Pro)</span>
+                          <span className="text-sm font-bold text-blue-600">300 chats included</span>
+                        </div>
+                        <p className="text-xs text-gray-600">₱1,299/month</p>
+                      </div>
+
+                      {nextBlockInfo && !nextBlockInfo.isFree && (
+                        <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm font-semibold text-gray-900">
+                              Next Block ({nextBlockInfo.nextBlockRange.start}-{nextBlockInfo.nextBlockRange.end} chats)
+                            </span>
+                            <span className="text-sm font-bold text-amber-600">
+                              {formatPricePHP(nextBlockInfo.nextBlockPrice)}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-600">
+                            {chatsUntilNextBlock} chats until next block
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                        <h4 className="text-xs font-semibold text-gray-700 mb-2">Pricing Breakdown:</h4>
+                        <div className="space-y-1 text-xs text-gray-600">
+                          <div className="flex justify-between">
+                            <span>100 chats:</span>
+                            <span className="font-medium">₱200.00 (₱2.00/chat)</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>200 chats:</span>
+                            <span className="font-medium">₱380.00 (₱1.90/chat) <span className="text-green-600">-5%</span></span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>500 chats:</span>
+                            <span className="font-medium">₱900.00 (₱1.80/chat) <span className="text-green-600">-10%</span></span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>1,000 chats:</span>
+                            <span className="font-medium">₱1,700.00 (₱1.70/chat) <span className="text-green-600">-15%</span></span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          setShowChatLimitModal(false);
+                          setShowPayAsYouGoModal(true);
+                        }}
+                        className="w-full mt-3 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                      >
+                        View Purchase Options
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Free User Upgrade CTA */}
+              {!isProUser && (
+                <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl p-4 text-white">
+                  <h3 className="font-semibold mb-2 flex items-center gap-2">
+                    <Zap className="w-5 h-5" />
+                    Upgrade to Pro
+                  </h3>
+                  <p className="text-sm text-blue-50 mb-3">
+                    Get 10x more chats (300/month) plus advanced features with Pro membership.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setShowChatLimitModal(false);
+                      setShowUpgradeModal(true);
+                    }}
+                    className="w-full py-2.5 bg-white text-blue-600 rounded-lg font-semibold hover:bg-blue-50 transition-colors"
+                  >
+                    Upgrade Now
+                  </button>
+                </div>
+              )}
+
+              {/* Info Box */}
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                <div className="flex items-start gap-2">
+                  <HelpCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm text-gray-700">
+                    <p className="font-semibold text-gray-900 mb-1">How Chat Limits Work</p>
+                    <ul className="space-y-1 text-xs text-gray-600 list-disc list-inside">
+                      <li>Chat limits reset at the beginning of each month</li>
+                      <li>Extensions purchased with coins are valid for the current month</li>
+                      <li>Pay As You Go blocks are valid until the end of the billing cycle</li>
+                      <li>Unused chats do not roll over to the next month</li>
+                    </ul>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

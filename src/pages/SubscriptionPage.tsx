@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Check, ChevronDown, Shield, HelpCircle, Sparkles, Zap, Users, Crown, Star } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, HelpCircle, Sparkles, Zap, Users, Crown, Star } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -368,34 +368,6 @@ export default function SubscriptionPage({ onNavigateBack, onSelectPlan, onNavig
           })}
         </div>
 
-        {/* Money-Back Guarantee */}
-        <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-3xl shadow-lg border-2 border-green-200 p-6">
-          <div className="flex items-start gap-4">
-            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center flex-shrink-0">
-              <Shield className="w-7 h-7 text-white" />
-            </div>
-            <div className="flex-1">
-              <h3 className="font-bold text-lg text-gray-900 mb-2">7-Day Money-Back Guarantee</h3>
-              <p className="text-sm text-gray-700 mb-3">
-                Try any paid plan risk-free. If you're not completely satisfied within the first 7 days, we'll refund your payment in full—no questions asked.
-              </p>
-              <div className="space-y-2">
-                <div className="flex items-start gap-2">
-                  <Check className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm text-gray-700">Full refund within 7 days</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <Check className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm text-gray-700">No questions asked policy</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <Check className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm text-gray-700">Cancel anytime before renewal</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
 
         {/* FAQ Section */}
         <div className="bg-white rounded-3xl shadow-lg border border-gray-200 p-6">
@@ -425,8 +397,8 @@ export default function SubscriptionPage({ onNavigateBack, onSelectPlan, onNavig
                 answer: 'Your purchased coins remain in your account even after cancellation. However, bonus coins from your subscription plan expire when your subscription ends. You can still use remaining coins to access features on the Free plan.'
               },
               {
-                question: 'Can I get a refund after 7 days?',
-                answer: 'Our 7-day money-back guarantee covers the first week only. After 7 days, subscriptions are non-refundable, but you can cancel anytime to prevent future charges. Your access continues until the end of your paid period.'
+                question: 'Can I get a refund?',
+                answer: 'Subscriptions are non-refundable after purchase, but you can cancel anytime to prevent future charges. Your access continues until the end of your paid period.'
               },
               {
                 question: 'Do unused features roll over?',

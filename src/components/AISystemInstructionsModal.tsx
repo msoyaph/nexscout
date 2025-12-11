@@ -15,7 +15,9 @@
 import { useState, useEffect } from 'react';
 import { Sparkles, X, Save, Power, AlertCircle, Check } from 'lucide-react';
 import AIInstructionsRichEditor from './AIInstructionsRichEditor';
+// import InstructionsTransformationButtons from './InstructionsTransformationButtons'; // Hidden for ai_messages
 import { aiInstructionsService, type AIFeatureType, type RichContent } from '../services/ai/aiInstructionsService';
+import { supabase } from '../lib/supabase';
 
 interface AISystemInstructionsModalProps {
   isOpen: boolean;
@@ -37,8 +39,9 @@ export default function AISystemInstructionsModal({
     images: [],
     files: []
   });
-  const [useCustomInstructions, setUseCustomInstructions] = useState(false);
-  const [overrideIntelligence, setOverrideIntelligence] = useState(false);
+  // Default to ON for ai_messages (primary source), OFF for others
+  const [useCustomInstructions, setUseCustomInstructions] = useState(true);
+  const [overrideIntelligence, setOverrideIntelligence] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -51,12 +54,60 @@ export default function AISystemInstructionsModal({
   const loadSettings = async () => {
     setLoading(true);
     try {
-      const instructions = await aiInstructionsService.getInstructions(userId, featureType);
+      // For ai_messages, load from chatbot_settings (unified source)
+      if (featureType === 'ai_messages') {
+        const { data: chatbotSettings } = await supabase
+          .from('chatbot_settings')
+          .select('custom_system_instructions, use_custom_instructions, instructions_override_intelligence, integrations')
+          .eq('user_id', userId)
+          .maybeSingle();
 
-      if (instructions) {
-        setRichContent(instructions.richContent);
-        setUseCustomInstructions(instructions.useCustomInstructions);
-        setOverrideIntelligence(instructions.overrideIntelligence);
+        if (chatbotSettings) {
+          // Extract attachments from integrations JSONB
+          const attachments = chatbotSettings.integrations?.instructions_attachments || [];
+          
+          // Map attachments to RichContent format
+          const images = attachments
+            .filter((a: any) => a.type === 'image')
+            .map((a: any) => ({
+              type: (a.imageType || a.type || 'other') as 'product' | 'logo' | 'catalog' | 'screenshot' | 'other',
+              url: a.url,
+              caption: a.caption,
+              alt: a.caption,
+            }));
+          
+          const files = attachments
+            .filter((a: any) => a.type === 'file' || a.type === 'pdf' || a.type === 'document' || a.type === 'other')
+            .map((a: any) => ({
+              type: (a.fileType || (a.type === 'pdf' ? 'pdf' : a.type === 'document' ? 'doc' : 'other')) as 'brochure' | 'doc' | 'pdf' | 'spreadsheet' | 'other',
+              url: a.url,
+              name: a.name || a.url.split('/').pop() || 'File',
+              size: a.size,
+            }));
+
+          setRichContent({
+            text: chatbotSettings.custom_system_instructions || '',
+            images: images,
+            files: files,
+          });
+          // Default to ON since AI System Instructions is primary source
+          setUseCustomInstructions(chatbotSettings.use_custom_instructions ?? true);
+          // Override is always true when custom instructions are enabled (primary source)
+          setOverrideIntelligence(chatbotSettings.instructions_override_intelligence ?? true);
+        } else {
+          // Default to ON with empty content
+          setUseCustomInstructions(true);
+          setOverrideIntelligence(true);
+          setRichContent({ text: '', images: [], files: [] });
+        }
+      } else {
+        // For other features, use existing ai_system_instructions table
+        const instructions = await aiInstructionsService.getInstructions(userId, featureType);
+        if (instructions) {
+          setRichContent(instructions.richContent);
+          setUseCustomInstructions(instructions.useCustomInstructions);
+          setOverrideIntelligence(instructions.overrideIntelligence);
+        }
       }
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -68,22 +119,90 @@ export default function AISystemInstructionsModal({
   const handleSave = async () => {
     setSaving(true);
     try {
-      const result = await aiInstructionsService.saveInstructions(userId, featureType, {
-        customInstructions: richContent.text,
-        useCustomInstructions,
-        overrideIntelligence,
-        richContent,
-      });
+      // For ai_messages, save to chatbot_settings (unified source)
+      if (featureType === 'ai_messages') {
+        // Prepare attachments from rich content (map to Attachment format used by ChatbotSettingsPage)
+        const attachments: any[] = [
+          ...richContent.images.map(img => ({
+            id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            type: 'image',
+            url: img.url,
+            caption: img.caption || '',
+            imageType: img.type,
+            name: img.caption || img.url.split('/').pop() || 'Image',
+          })),
+          ...richContent.files.map(file => ({
+            id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            type: file.type === 'pdf' ? 'pdf' : file.type === 'doc' ? 'document' : 'file',
+            url: file.url,
+            name: file.name,
+            size: file.size || 0,
+            fileType: file.type,
+          })),
+        ];
 
-      if (result.success) {
-        alert('Settings saved successfully!');
+        // Get existing chatbot_settings to preserve other fields
+        const { data: existing } = await supabase
+          .from('chatbot_settings')
+          .select('*')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        const integrations = existing?.integrations || {};
+        integrations.instructions_attachments = attachments;
+
+        const updateData: any = {
+          user_id: userId,
+          custom_system_instructions: richContent.text,
+          use_custom_instructions: useCustomInstructions,
+          // When AI System Instructions is enabled, it's the primary source (always override)
+          instructions_override_intelligence: useCustomInstructions ? true : false,
+          integrations: integrations,
+          updated_at: new Date().toISOString(),
+        };
+
+        // Preserve existing fields if they exist
+        if (existing) {
+          updateData.display_name = existing.display_name;
+          updateData.greeting_message = existing.greeting_message;
+          updateData.tone = existing.tone;
+          updateData.reply_depth = existing.reply_depth;
+          updateData.auto_qualify_threshold = existing.auto_qualify_threshold;
+          updateData.auto_convert_to_prospect = existing.auto_convert_to_prospect;
+          updateData.is_active = existing.is_active;
+          updateData.enabled_channels = existing.enabled_channels;
+          updateData.widget_color = existing.widget_color;
+          updateData.widget_position = existing.widget_position;
+        }
+
+        const { error } = await supabase
+          .from('chatbot_settings')
+          .upsert(updateData, {
+            onConflict: 'user_id'
+          });
+
+        if (error) throw error;
+        alert('AI System Instructions saved successfully!');
         onClose();
       } else {
-        alert(`Failed to save: ${result.error}`);
+        // For other features, use existing ai_system_instructions table
+        const result = await aiInstructionsService.saveInstructions(userId, featureType, {
+          customInstructions: richContent.text,
+          useCustomInstructions,
+          overrideIntelligence,
+          richContent,
+        });
+
+        if (result.success) {
+          alert('Settings saved successfully!');
+          onClose();
+        } else {
+          alert(`Failed to save: ${result.error}`);
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving:', error);
-      alert('Failed to save settings');
+      alert(`Failed to save settings: ${error.message || 'Unknown error'}`);
     } finally {
       setSaving(false);
     }
@@ -133,7 +252,14 @@ export default function AISystemInstructionsModal({
                     <p className="text-xs text-gray-600 mt-1">Override default AI behavior for {featureName.toLowerCase()}</p>
                   </div>
                   <button
-                    onClick={() => setUseCustomInstructions(!useCustomInstructions)}
+                    onClick={() => {
+                      const newValue = !useCustomInstructions;
+                      setUseCustomInstructions(newValue);
+                      // For ai_messages, override is always true when enabled (primary source)
+                      if (featureType === 'ai_messages' && newValue) {
+                        setOverrideIntelligence(true);
+                      }
+                    }}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                       useCustomInstructions ? 'bg-purple-600' : 'bg-gray-300'
                     }`}
@@ -145,8 +271,11 @@ export default function AISystemInstructionsModal({
                     />
                   </button>
                 </div>
-
-                {useCustomInstructions && (
+                
+                {/* Hidden: AI System Instructions primary source info */}
+                
+                {/* For other features, show override toggle */}
+                {featureType !== 'ai_messages' && useCustomInstructions && (
                   <div className="pt-3 border-t border-purple-200">
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
@@ -183,6 +312,8 @@ export default function AISystemInstructionsModal({
                 />
               )}
 
+              {/* Hidden: Transformation Buttons */}
+
               {/* Help Section */}
               {useCustomInstructions && (
                 <details className="bg-blue-50 border border-blue-200 rounded-xl">
@@ -208,30 +339,7 @@ export default function AISystemInstructionsModal({
                 </details>
               )}
 
-              {/* Mode Indicators */}
-              {useCustomInstructions && !overrideIntelligence && (
-                <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-                  <div className="flex items-start gap-2">
-                    <Check className="w-5 h-5 text-green-600 flex-shrink-0" />
-                    <div className="text-xs text-gray-700">
-                      <p className="font-semibold text-green-900 mb-1">Smart Mode Active</p>
-                      <p>Custom instructions will be <strong>merged</strong> with your auto-synced company data, products, and brand voice.</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {useCustomInstructions && overrideIntelligence && (
-                <div className="bg-orange-50 border-2 border-orange-300 rounded-xl p-4">
-                  <div className="flex items-start gap-2">
-                    <AlertCircle className="w-5 h-5 text-orange-600 flex-shrink-0" />
-                    <div className="text-xs text-gray-700">
-                      <p className="font-semibold text-orange-900 mb-1">⚠️ Override Mode Active</p>
-                      <p>Your custom instructions will <strong>completely replace</strong> all auto-synced intelligence. The AI will only use what you write here and the media you attach.</p>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {/* Hidden: Mode Indicators */}
 
               {/* Info When Disabled */}
               {!useCustomInstructions && (

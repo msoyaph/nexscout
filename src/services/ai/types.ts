@@ -44,6 +44,9 @@ export interface AIRequestConfig {
   // Energy & Billing
   action: AIAction;
   autoSelectModel?: boolean; // Auto-downgrade if low energy
+  skipCoinCheck?: boolean; // Skip coin checking in edge function (coins already deducted or will be deducted separately)
+  coinCost?: number; // Coin cost if already deducted (0 = no deduction needed)
+  transactionId?: string; // Optional transaction ID for deduplication (prevents multiple deductions for same batch)
   
   // Retry behavior
   retryAttempts?: number;

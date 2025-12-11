@@ -227,7 +227,7 @@ export function getEmotionalNudgeStyle(emotion: EmotionalState): {
       tone: 'reassuring',
       urgency: 'low',
       style: 'reassurance',
-      messageTemplate: "Try {feature} risk-free for 7 days. Cancel anytime.",
+      messageTemplate: "Try {feature} free. Cancel anytime.",
     },
     overwhelmed: {
       tone: 'supportive',

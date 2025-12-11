@@ -150,7 +150,7 @@ export function SurgeNudgeModal({ isOpen, onClose, surge, offer, onUpgrade }: Su
           </button>
 
           <p className="text-center text-sm text-gray-500 mt-4">
-            Risk-free • Cancel anytime • Instant activation
+            Cancel anytime • Instant activation
           </p>
         </div>
       </div>

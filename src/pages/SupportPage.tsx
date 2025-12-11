@@ -112,7 +112,6 @@ export default function SupportPage({ onNavigateBack }: SupportPageProps) {
       articles: [
         { title: 'Choosing the right plan for your needs', link: '#' },
         { title: 'How to upgrade or downgrade your plan', link: '#' },
-        { title: 'Understanding the 7-day money-back guarantee', link: '#' },
         { title: 'Managing your payment methods', link: '#' },
         { title: 'Viewing invoices and payment history', link: '#' }
       ]

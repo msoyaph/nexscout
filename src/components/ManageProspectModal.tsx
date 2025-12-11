@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, User, Mail, Phone, FileText, Upload, Image as ImageIcon, Save } from 'lucide-react';
+import { X, User, Mail, Phone, FileText, Upload, Image as ImageIcon, Save, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { prospectSyncService } from '../services/prospects/prospectSyncService';
@@ -11,6 +11,12 @@ interface ManageProspectModalProps {
   prospectId: string;
   prospect: any;
   onProspectUpdated: () => void;
+  sessionData?: {
+    visitor_name?: string | null;
+    visitor_email?: string | null;
+    visitor_phone?: string | null;
+    conversation_context?: any;
+  } | null;
 }
 
 export default function ManageProspectModal({
@@ -18,7 +24,8 @@ export default function ManageProspectModal({
   onClose,
   prospectId,
   prospect,
-  onProspectUpdated
+  onProspectUpdated,
+  sessionData
 }: ManageProspectModalProps) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -33,16 +40,46 @@ export default function ManageProspectModal({
   });
 
   useEffect(() => {
-    if (isOpen && prospect) {
+    if (isOpen) {
+      // Priority: Use prospect data if available, otherwise use session data
+      let name = '';
+      let email = '';
+      let phone = '';
+      let notes = '';
+      
+      if (prospect) {
+        name = prospect.full_name || '';
+        email = prospect.email || prospect.metadata?.email || '';
+        phone = prospect.phone || prospect.metadata?.phone || '';
+        notes = prospect.bio_text || prospect.metadata?.notes || '';
+      }
+      
+      // If prospect data is missing, use session data
+      if (!name && sessionData?.visitor_name) {
+        name = sessionData.visitor_name;
+      }
+      if (!email && sessionData?.visitor_email) {
+        email = sessionData.visitor_email;
+      }
+      if (!phone && sessionData?.visitor_phone) {
+        phone = sessionData.visitor_phone;
+      }
+      if (!notes && sessionData?.conversation_context) {
+        const context = typeof sessionData.conversation_context === 'string'
+          ? JSON.parse(sessionData.conversation_context)
+          : sessionData.conversation_context;
+        notes = context?.personal_note || '';
+      }
+      
       setFormData({
-        full_name: prospect.full_name || '',
-        email: prospect.email || prospect.metadata?.email || '',
-        phone: prospect.phone || prospect.metadata?.phone || '',
-        notes: prospect.bio_text || prospect.metadata?.notes || '',
-        uploaded_image_url: prospect.uploaded_image_url || ''
+        full_name: name,
+        email: email,
+        phone: phone,
+        notes: notes,
+        uploaded_image_url: prospect?.uploaded_image_url || ''
       });
     }
-  }, [isOpen, prospect]);
+  }, [isOpen, prospect, sessionData]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -295,6 +332,45 @@ export default function ManageProspectModal({
                   Save Changes
                 </>
               )}
+            </button>
+          </div>
+
+          {/* Delete Prospect */}
+          <div className="pt-6 mt-4 border-t border-gray-200">
+            <button
+              type="button"
+              onClick={async () => {
+                if (!confirm('Are you sure you want to delete this prospect? This action cannot be undone.')) {
+                  return;
+                }
+                
+                if (!prospectId || !user) return;
+                
+                setLoading(true);
+                try {
+                  const { error } = await supabase
+                    .from('prospects')
+                    .delete()
+                    .eq('id', prospectId)
+                    .eq('user_id', user.id);
+                  
+                  if (error) throw error;
+                  
+                  alert('Prospect deleted successfully');
+                  onClose();
+                  onProspectUpdated();
+                } catch (error: any) {
+                  console.error('Error deleting prospect:', error);
+                  alert('Failed to delete prospect. Please try again.');
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              disabled={loading || uploading}
+              className="w-full px-4 py-3 bg-red-50 text-red-600 rounded-xl font-semibold hover:bg-red-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 border border-red-200"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete Prospect
             </button>
           </div>
         </form>

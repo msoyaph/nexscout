@@ -366,7 +366,7 @@ class PitchDeckGeneratorService {
         } else {
           bullets.push('Proven results from thousands of satisfied clients');
         }
-        bullets.push('Affordable, accessible, and backed by our guarantee');
+        bullets.push('Affordable, accessible, with proven results');
       } else {
         bullets.push(`${name || 'We'} specialize in ${industry || 'helping people like you'}`);
         bullets.push(value_proposition || 'Solutions that align with your goals');
@@ -382,7 +382,7 @@ class PitchDeckGeneratorService {
         bullets.push('A solution designed specifically for people like you');
         bullets.push('Proven results from thousands of satisfied clients');
         bullets.push('Affordable and accessible for Filipino families');
-        bullets.push('Backed by our guarantee and support');
+        bullets.push('Backed by proven results and support');
       } else if (goal === 'invite_call') {
         bullets.push('I would love to share more details in a quick conversation');
         bullets.push('No pressure - just a genuine discussion about fit');
@@ -448,7 +448,7 @@ class PitchDeckGeneratorService {
     } else if (goal === 'sell') {
       bullets.push('Would you like to see how this works for you?');
       bullets.push('I can walk you through the details');
-      bullets.push('Risk-free-satisfaction guaranteed');
+      bullets.push('Proven results with satisfied customers');
       cta = 'Connect with me to discuss your options';
     } else if (goal === 'invite_call') {
       bullets.push('Free ka ba for a quick coffee chat?');

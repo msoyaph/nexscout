@@ -26,6 +26,12 @@ export interface ScoutScoreV4Result {
   explanation: string[];
   insights: string[];
   recommendations: string[];
+  // Extended v4 fields for unified interface
+  leadTemperature?: 'cold' | 'warming_up' | 'warm' | 'hot';
+  intentSignal?: string | null;
+  conversionLikelihood?: number | null;
+  recommendedCTA?: string | null;
+  lastInteractionDaysAgo?: number;
 }
 
 interface WeightConfig {
@@ -118,6 +124,17 @@ class ScoutScoreV4Engine {
       const insights = this.generateInsights(input);
       const recommendations = this.generateRecommendations(input, normalizedScore);
 
+      // Calculate lead temperature from behavioral momentum and freshness
+      const leadTemperature = this.determineLeadTemperature(behaviorMomentumScore, freshnessScore, normalizedScore);
+      
+      // Get last interaction days ago for time decay tracking
+      const lastInteractionDaysAgo = await this.getLastInteractionDaysAgo(input.prospectId, input.userId);
+      
+      // Generate extended output fields
+      const intentSignal = this.generateIntentSignal(opportunityScore, painPointScore, behaviorMomentumScore);
+      const conversionLikelihood = this.calculateConversionLikelihood(normalizedScore, behaviorMomentumScore, freshnessScore);
+      const recommendedCTA = this.generateRecommendedCTA(leadTemperature, opportunityScore, painPointScore);
+
       return {
         score: Math.round(normalizedScore),
         rating,
@@ -134,6 +151,11 @@ class ScoutScoreV4Engine {
         explanation,
         insights,
         recommendations,
+        leadTemperature,
+        intentSignal,
+        conversionLikelihood,
+        recommendedCTA,
+        lastInteractionDaysAgo,
       };
     } catch (error) {
       console.error('ScoutScore v4 calculation error:', error);
@@ -295,17 +317,41 @@ class ScoutScoreV4Engine {
   }
 
   private async calculateFreshnessScore(input: ScoutScoreV4Input): Promise<number> {
-    if (!input.browserCaptureData?.lastSeen) return 0.5;
+    // Try to get last interaction from database if not in input
+    let lastInteractionDaysAgo = 999;
+    
+    if (input.browserCaptureData?.lastSeen) {
+      const lastSeenDate = new Date(input.browserCaptureData.lastSeen);
+      lastInteractionDaysAgo = (Date.now() - lastSeenDate.getTime()) / (1000 * 60 * 60 * 24);
+    } else {
+      // Fetch from database
+      try {
+        const { data: prospect } = await supabase
+          .from('prospects')
+          .select('updated_at, prospect_profiles(last_event_at)')
+          .eq('id', input.prospectId)
+          .eq('user_id', input.userId)
+          .maybeSingle();
+        
+        if (prospect) {
+          const lastEventAt = prospect.prospect_profiles?.[0]?.last_event_at || prospect.updated_at;
+          if (lastEventAt) {
+            lastInteractionDaysAgo = (Date.now() - new Date(lastEventAt).getTime()) / (1000 * 60 * 60 * 24);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching last interaction:', error);
+      }
+    }
 
-    const lastSeenDate = new Date(input.browserCaptureData.lastSeen);
-    const daysDiff = (Date.now() - lastSeenDate.getTime()) / (1000 * 60 * 60 * 24);
-
-    if (daysDiff <= 1) return 1.0;
-    if (daysDiff <= 3) return 0.9;
-    if (daysDiff <= 7) return 0.7;
-    if (daysDiff <= 14) return 0.5;
-    if (daysDiff <= 30) return 0.3;
-    return 0.1;
+    // Time-decay scoring with freshness logic
+    if (lastInteractionDaysAgo <= 1) return 1.0;
+    if (lastInteractionDaysAgo <= 3) return 0.9;
+    if (lastInteractionDaysAgo <= 7) return 0.7;
+    if (lastInteractionDaysAgo <= 14) return 0.5;
+    if (lastInteractionDaysAgo <= 30) return 0.3;
+    if (lastInteractionDaysAgo <= 60) return 0.15;
+    return 0.1; // Heavy decay after 60 days
   }
 
   private getRating(score: number): 'hot' | 'warm' | 'cold' {
@@ -394,6 +440,82 @@ class ScoutScoreV4Engine {
     return recommendations;
   }
 
+  private determineLeadTemperature(
+    behaviorMomentum: number,
+    freshness: number,
+    overallScore: number
+  ): 'cold' | 'warming_up' | 'warm' | 'hot' {
+    // Combine behavioral momentum and freshness for maturity assessment
+    const maturityScore = (behaviorMomentum * 0.6) + (freshness * 0.4);
+    
+    if (maturityScore >= 0.8 && overallScore >= 75) return 'hot';
+    if (maturityScore >= 0.6 && overallScore >= 60) return 'warm';
+    if (maturityScore >= 0.4 && behaviorMomentum > freshness) return 'warming_up';
+    return 'cold';
+  }
+
+  private async getLastInteractionDaysAgo(prospectId: string, userId: string): Promise<number> {
+    try {
+      const { data: prospect } = await supabase
+        .from('prospects')
+        .select('updated_at, prospect_profiles(last_event_at)')
+        .eq('id', prospectId)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (!prospect) return 999;
+
+      const lastEventAt = prospect.prospect_profiles?.[0]?.last_event_at || prospect.updated_at;
+      if (!lastEventAt) return 999;
+
+      return Math.floor((Date.now() - new Date(lastEventAt).getTime()) / (1000 * 60 * 60 * 24));
+    } catch {
+      return 999;
+    }
+  }
+
+  private generateIntentSignal(
+    opportunityScore: number,
+    painPointScore: number,
+    behaviorMomentum: number
+  ): string | null {
+    if (opportunityScore >= 0.7 && painPointScore >= 0.7) return 'high_intent';
+    if (behaviorMomentum >= 0.7) return 'evaluating';
+    if (opportunityScore >= 0.5) return 'just_browsing';
+    if (painPointScore >= 0.5) return 'problem_aware';
+    return null;
+  }
+
+  private calculateConversionLikelihood(
+    score: number,
+    behaviorMomentum: number,
+    freshness: number
+  ): number {
+    // Base likelihood from score, adjusted by momentum and freshness
+    let likelihood = score;
+    
+    // Boost from momentum (active engagement)
+    likelihood += behaviorMomentum * 10;
+    
+    // Boost from freshness (recent interaction)
+    likelihood += freshness * 5;
+    
+    // Cap at 100
+    return Math.max(0, Math.min(100, Math.round(likelihood)));
+  }
+
+  private generateRecommendedCTA(
+    leadTemperature: 'cold' | 'warming_up' | 'warm' | 'hot',
+    opportunityScore: number,
+    painPointScore: number
+  ): string | null {
+    if (leadTemperature === 'hot') return 'closing_offer';
+    if (leadTemperature === 'warm' && opportunityScore >= 0.6) return 'direct_offer';
+    if (leadTemperature === 'warming_up') return 'nurture_sequence';
+    if (painPointScore >= 0.6) return 'reminder';
+    return 'build_rapport';
+  }
+
   private getDefaultScore(): ScoutScoreV4Result {
     return {
       score: 50,
@@ -411,6 +533,11 @@ class ScoutScoreV4Engine {
       explanation: ['Insufficient data for detailed scoring'],
       insights: [],
       recommendations: ['Gather more information about this prospect'],
+      leadTemperature: 'cold',
+      intentSignal: null,
+      conversionLikelihood: 50,
+      recommendedCTA: 'build_rapport',
+      lastInteractionDaysAgo: 999,
     };
   }
 }

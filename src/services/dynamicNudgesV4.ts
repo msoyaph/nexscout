@@ -263,9 +263,9 @@ export function generateEmotionalCopy(emotion: EmotionalState, hasDiscount: bool
       "Let's do this! Upgrade and dominate.",
     ],
     hesitant: [
-      hasDiscount ? "Try PRO risk-free. Special offer just for you!" : "Try PRO for 7 days risk-free.",
+      hasDiscount ? "Try PRO today. Special offer just for you!" : "Try PRO - cancel anytime.",
       "No commitment needed. Cancel anytime.",
-      "Join hundreds of satisfied users. Risk-free trial.",
+      "Join hundreds of satisfied users. Start free, upgrade anytime.",
     ],
     skeptical: [
       "Hundreds of closers increased sales by 3x with PRO.",

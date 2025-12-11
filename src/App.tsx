@@ -1,4 +1,4 @@
-import { useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useState, useEffect, Component, ErrorInfo, ReactNode, useMemo } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { EnergyProvider } from './contexts/EnergyContext';
 import { NudgeProvider } from './contexts/NudgeContext';
@@ -47,6 +47,7 @@ import AIChatbotPage from './pages/AIChatbotPage';
 import AIChatbotControlPanel from './pages/AIChatbotControlPanel';
 import PublicChatPage from './pages/PublicChatPage';
 import PublicBookingPage from './pages/PublicBookingPage';
+import FloatingChatWidget from './components/FloatingChatWidget';
 import ChatbotSettingsPage from './pages/ChatbotSettingsPage';
 import TermsOfServicePage from './pages/TermsOfServicePage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
@@ -131,8 +132,13 @@ class ErrorBoundary extends Component<
 // Main App component - checks for public routes FIRST
 function App() {
   // CRITICAL: Check for public route BEFORE ANY OTHER LOGIC
-  const path = window.location.pathname;
+  // Use useMemo to prevent re-renders from recalculating path
+  const path = useMemo(() => window.location.pathname, []);
+  
+  // Only log once on mount
+  useEffect(() => {
   console.log('[App] Current path:', path);
+  }, [path]);
 
   // Public Chat Route: /chat/[unique_id or custom_slug]
   if (path.startsWith('/chat/')) {
@@ -216,7 +222,10 @@ function App() {
     );
   }
 
+  // Only log once - use effect to prevent re-render loops
+  useEffect(() => {
   console.log('[App] Authenticated route - loading AuthProvider');
+  }, []);
 
   // For all other routes, use the normal authenticated app
   return (
@@ -276,6 +285,7 @@ function AppContent() {
   if (!user) {
     if (authView === 'signup') {
       return (
+        <>
         <NewSignupPage
           onNavigateToLogin={() => setAuthView('login')}
           onSignupSuccess={async () => {
@@ -286,15 +296,22 @@ function AppContent() {
             // Don't reload - let React handle the state change
           }}
         />
+          {/* Floating Chat Widget for non-authenticated users */}
+          <FloatingChatWidget chatSlug="6ee15dca0e" position="bottom-right" />
+        </>
       );
     }
     return (
+      <>
       <NewLoginPage
         onNavigateToSignup={() => setAuthView('signup')}
         onLoginSuccess={() => {
           setAuthView('login');
         }}
       />
+        {/* Floating Chat Widget for non-authenticated users */}
+        <FloatingChatWidget chatSlug="6ee15dca0e" position="bottom-right" />
+      </>
     );
   }
 
@@ -519,10 +536,14 @@ function WelcomeBonusModalWrapper() {
       // Small delay to ensure smooth page load
       const timer = setTimeout(() => setIsOpen(true), 500);
       return () => clearTimeout(timer);
+    } else {
+      // If shouldShow is false (dismissed), ensure modal is closed
+      setIsOpen(false);
     }
   }, [shouldShow]);
 
-  if (!isOpen) return null;
+  // Don't render if dismissed or not supposed to show
+  if (!shouldShow || !isOpen) return null;
 
   return <WelcomeBonusModal onClose={() => setIsOpen(false)} />;
 }

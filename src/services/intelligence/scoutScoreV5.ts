@@ -4,6 +4,7 @@ import { socialGraphBuilder } from './socialGraphBuilder';
 import { opportunityPredictionEngine } from './opportunityPredictionEngine';
 import { conversionPatternMapper } from './conversionPatternMapper';
 import type { Industry } from './conversionPatternMapper';
+import { getIndustryWeights, type ScoringWeights } from '../../config/scout/industryWeights';
 
 export interface ScoutScoreV5Result {
   success: boolean;
@@ -45,11 +46,34 @@ class ScoutScoreV5Engine {
     prospectId: string;
     userId: string;
     industry?: Industry;
+    activeIndustry?: Industry; // Active industry setting - must match industry for proper scoring
     horizonDays?: number;
   }): Promise<ScoutScoreV5Result> {
     const horizonDays = input.horizonDays || 7;
+    const industry = input.industry;
+    const activeIndustry = input.activeIndustry || industry;
+
+    // Industry isolation check: if active industry doesn't match, use neutral weights
+    const shouldIsolate = activeIndustry && industry && activeIndustry !== industry;
+    if (shouldIsolate) {
+      console.warn(`[ScoutScore V5] Industry mismatch: activeIndustry=${activeIndustry}, industry=${industry}. Using neutral scoring.`);
+    }
 
     try {
+      // Only fetch industry-specific patterns if industry matches active industry
+      const patternResultPromise = (activeIndustry === industry && industry)
+        ? conversionPatternMapper.analyzeConversionPatterns({
+            userId: input.userId,
+            industry: industry,
+          })
+        : Promise.resolve({
+            success: false,
+            globalPatterns: [],
+            personaPatterns: {},
+            industryPatterns: {},
+            recommendations: ['Using neutral patterns - industry mismatch'],
+          });
+
       const [v4Result, timelineResult, graphResult, opportunityResult, patternResult] = await Promise.all([
         scoutScoreV4Engine.calculateScoutScoreV4({
           prospectId: input.prospectId,
@@ -66,11 +90,13 @@ class ScoutScoreV5Engine {
           userId: input.userId,
           horizonDays,
         }),
-        conversionPatternMapper.analyzeConversionPatterns({
-          userId: input.userId,
-          industry: input.industry,
-        }),
+        patternResultPromise,
       ]);
+
+      // Get industry-specific weights (or neutral if mismatch)
+      const weights = shouldIsolate 
+        ? getIndustryWeights(undefined) // Neutral weights
+        : getIndustryWeights(activeIndustry || industry);
 
       const dimensions = this.calculateDimensions(
         v4Result,
@@ -80,23 +106,28 @@ class ScoutScoreV5Engine {
         patternResult
       );
 
-      const v5Score = this.calculateV5Score(dimensions);
+      const v5Score = this.calculateV5Score(dimensions, weights);
       const scoreBoost = v5Score - v4Result.score;
 
+      // Add industry to reasoning context
       const reasoning = this.generateLLMReasoning(
         v4Result,
         timelineResult,
         graphResult,
         opportunityResult,
         patternResult,
-        dimensions
+        dimensions,
+        v5Score,
+        industry,
+        shouldIsolate
       );
 
       const recommendations = this.generateRecommendations(
         opportunityResult,
         patternResult,
         timelineResult,
-        reasoning
+        reasoning,
+        industry
       );
 
       const metadata = {
@@ -214,15 +245,7 @@ class ScoutScoreV5Engine {
     return Math.max(0, Math.min(100, score));
   }
 
-  private calculateV5Score(dimensions: ScoutScoreV5Result['dimensions']): number {
-    const weights = {
-      baseScore: 0.35,
-      behavioralMomentum: 0.25,
-      socialInfluence: 0.15,
-      opportunityReadiness: 0.15,
-      patternMatch: 0.1,
-    };
-
+  private calculateV5Score(dimensions: ScoutScoreV5Result['dimensions'], weights: ScoringWeights): number {
     const weightedScore =
       dimensions.baseScore * weights.baseScore +
       dimensions.behavioralMomentum * weights.behavioralMomentum +
@@ -239,8 +262,12 @@ class ScoutScoreV5Engine {
     graphResult: any,
     opportunityResult: any,
     patternResult: any,
-    dimensions: ScoutScoreV5Result['dimensions']
+    dimensions: ScoutScoreV5Result['dimensions'],
+    v5Score: number,
+    industry?: Industry,
+    shouldIsolate?: boolean
   ): ScoutScoreV5Result['reasoning'] {
+    // Add industry isolation warning to reasoning if mismatch
     const keyStrengths: string[] = [];
     const keyWeaknesses: string[] = [];
     const actionableInsights: string[] = [];
@@ -289,7 +316,13 @@ class ScoutScoreV5Engine {
       keyWeaknesses.push('Extended period of inactivity - may have lost interest');
     }
 
-    const summary = this.generateSummary(keyStrengths, keyWeaknesses, dimensions);
+    // Add industry isolation warning if mismatch
+    if (shouldIsolate) {
+      keyWeaknesses.push('Industry mismatch - scoring may not be industry-optimized');
+      actionableInsights.push('Verify industry setting matches prospect industry for accurate scoring');
+    }
+
+    const summary = this.generateSummary(keyStrengths, keyWeaknesses, v5Score);
     const confidenceLevel = this.calculateConfidenceLevel(dimensions, timelineResult);
 
     return {
@@ -304,9 +337,8 @@ class ScoutScoreV5Engine {
   private generateSummary(
     strengths: string[],
     weaknesses: string[],
-    dimensions: ScoutScoreV5Result['dimensions']
+    v5Score: number
   ): string {
-    const v5Score = this.calculateV5Score(dimensions);
 
     if (v5Score >= 80) {
       return `Exceptional prospect with ${strengths.length} key strengths. High confidence in successful conversion with immediate action. ${strengths[0] || ''}`;
@@ -344,13 +376,19 @@ class ScoutScoreV5Engine {
     opportunityResult: any,
     patternResult: any,
     timelineResult: any,
-    reasoning: ScoutScoreV5Result['reasoning']
+    reasoning: ScoutScoreV5Result['reasoning'],
+    industry?: Industry
   ): ScoutScoreV5Result['recommendations'] {
     const nextStep = opportunityResult.prediction.recommendedNextStep;
+    
+    // Filter recommendations by industry if provided
+    const industryFilteredPatterns = industry && patternResult.industryPatterns?.[industry]
+      ? patternResult.industryPatterns[industry]
+      : patternResult.globalPatterns || [];
 
     const timing = this.formatTiming(opportunityResult.prediction.recommendedTiming, timelineResult);
 
-    const approach = this.selectApproach(patternResult, timelineResult, reasoning);
+    const approach = this.selectApproach(patternResult, timelineResult, reasoning, industry);
 
     const messageTemplate = this.generateMessageTemplate(reasoning, timelineResult);
 
@@ -382,7 +420,8 @@ class ScoutScoreV5Engine {
   private selectApproach(
     patternResult: any,
     timelineResult: any,
-    reasoning: ScoutScoreV5Result['reasoning']
+    reasoning: ScoutScoreV5Result['reasoning'],
+    industry?: Industry
   ): string {
     if (timelineResult.analytics.painPointIntensity >= 60) {
       return 'Pain-point focused approach: Lead with empathy and solution focus';
@@ -392,7 +431,12 @@ class ScoutScoreV5Engine {
       return 'Community-based approach: Leverage social connections and group engagement';
     }
 
-    const topPattern = patternResult.globalPatterns
+    // Use industry-specific patterns if available
+    const patternsToUse = industry && patternResult.industryPatterns?.[industry]
+      ? patternResult.industryPatterns[industry]
+      : patternResult.globalPatterns || [];
+
+    const topPattern = patternsToUse
       .filter((p: any) => p.successRate >= 0.35)
       .sort((a: any, b: any) => b.successRate - a.successRate)[0];
 

@@ -619,6 +619,158 @@ class EnergyEngineV5 {
       }
     };
   }
+
+  /**
+   * COMPATIBILITY METHODS - For AIOrchestrator and other services
+   * These methods provide compatibility with the older energy engine API
+   */
+
+  /**
+   * Check if user can perform action
+   */
+  async canPerformAction(
+    userId: string,
+    energyCost: number
+  ): Promise<{ canPerform: boolean; available: number; required: number }> {
+    try {
+      // Get user energy from database
+      const { data: userEnergy } = await supabase
+        .from('user_energy')
+        .select('current_energy')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      const currentEnergy = userEnergy?.current_energy || 0;
+
+      return {
+        canPerform: currentEnergy >= energyCost,
+        available: currentEnergy,
+        required: energyCost
+      };
+    } catch (error) {
+      console.error('[EnergyEngineV5] Error checking energy:', error);
+      return {
+        canPerform: false,
+        available: 0,
+        required: energyCost
+      };
+    }
+  }
+
+  /**
+   * Consume energy for an action
+   */
+  async consumeEnergy(
+    userId: string,
+    energyCost: number,
+    action: string
+  ): Promise<void> {
+    try {
+      // Try RPC function first
+      const { error: rpcError } = await supabase.rpc('deduct_energy', {
+        p_user_id: userId,
+        p_amount: energyCost,
+        p_reason: action
+      });
+
+      if (rpcError) {
+        // Fallback: Direct update if RPC doesn't exist
+        try {
+          const { data: current, error: selectError } = await supabase
+            .from('user_energy')
+            .select('current_energy')
+            .eq('user_id', userId)
+            .maybeSingle();
+
+          if (selectError) {
+            console.warn('[EnergyEngineV5] user_energy table may not exist:', selectError);
+            return; // Gracefully skip if table doesn't exist
+          }
+
+          if (current) {
+            const { error: updateError } = await supabase
+              .from('user_energy')
+              .update({
+                current_energy: Math.max(0, (current.current_energy || 0) - energyCost),
+                updated_at: new Date().toISOString()
+              })
+              .eq('user_id', userId);
+
+            if (updateError) {
+              console.warn('[EnergyEngineV5] Failed to update energy:', updateError);
+              return; // Gracefully skip if update fails
+            }
+          }
+        } catch (fallbackError) {
+          console.warn('[EnergyEngineV5] Fallback energy update failed:', fallbackError);
+          // Don't throw - allow action to proceed
+        }
+      }
+
+      // Try to log energy consumption (optional - don't fail if table doesn't exist)
+      try {
+        await supabase.from('energy_transactions').insert({
+          user_id: userId,
+          amount: -energyCost,
+          transaction_type: 'consumption',
+          reason: action,
+          created_at: new Date().toISOString()
+        });
+      } catch (logError) {
+        // Table may not exist - that's okay, just log it
+        console.warn('[EnergyEngineV5] energy_transactions table may not exist:', logError);
+      }
+    } catch (error) {
+      console.error('[EnergyEngineV5] Error consuming energy:', error);
+      // Don't throw - allow action to proceed even if energy tracking fails
+    }
+  }
+
+  /**
+   * Get energy status for user
+   */
+  async getEnergyStatus(userId: string): Promise<{ current: number; max: number; tier: string } | null> {
+    try {
+      const { data: userEnergy } = await supabase
+        .from('user_energy')
+        .select('current_energy, max_energy')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (!userEnergy) {
+        // Get user tier to determine max energy
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('subscription_tier')
+          .eq('id', userId)
+          .maybeSingle();
+
+        const tier = profile?.subscription_tier || 'free';
+        const maxEnergy = tier === 'free' ? 100 : tier === 'pro' ? 500 : 1000;
+
+        return {
+          current: 0,
+          max: maxEnergy,
+          tier
+        };
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('subscription_tier')
+        .eq('id', userId)
+        .maybeSingle();
+
+      return {
+        current: userEnergy.current_energy || 0,
+        max: userEnergy.max_energy || 100,
+        tier: profile?.subscription_tier || 'free'
+      };
+    } catch (error) {
+      console.error('[EnergyEngineV5] Error getting energy status:', error);
+      return null;
+    }
+  }
 }
 
 export const energyEngineV5 = new EnergyEngineV5();

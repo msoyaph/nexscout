@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Save, Sparkles, Building2, Plus, Trash2, Edit, ArrowLeft } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import AiSystemInstructionsEditor from '../../components/editor/AiSystemInstructionsEditor';
 
 interface CompanyTemplate {
   id: string;
@@ -116,7 +117,15 @@ export default function DataFeederPage() {
             <div><label className="block text-sm font-semibold mb-2">Short Description</label><input type="text" value={shortDescription} onChange={(e) => setShortDescription(e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
             <div><label className="block text-sm font-semibold mb-2">Logo URL</label><input type="url" value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} className="w-full px-4 py-3 border rounded-lg" />{logoUrl && <img src={logoUrl} className="h-16 mt-2" />}</div>
             <div><label className="block text-sm font-semibold mb-2">Website URL</label><input type="url" value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
-            <div><label className="block text-sm font-semibold mb-2 flex items-center gap-2"><Sparkles className="size-5 text-purple-600" />AI System Instructions</label><textarea value={aiInstructions} onChange={(e) => setAiInstructions(e.target.value)} rows={20} className="w-full px-4 py-3 border rounded-lg font-mono text-sm" placeholder="Paste full AI instructions..." /><p className="text-xs text-gray-500">{aiInstructions.length} chars</p></div>
+            <div>
+              <AiSystemInstructionsEditor
+                value={aiInstructions}
+                onChange={setAiInstructions}
+                label="AI System Instructions"
+                helperText="Tip: You can format text, add images, attach files, and embed YouTube videos."
+                placeholder="Paste full AI instructions..."
+              />
+            </div>
             <label className="flex items-center gap-2"><input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />Active</label>
             <div className="flex justify-end gap-4 pt-4 border-t"><button onClick={() => setShowEditor(false)} className="px-6 py-3 text-gray-600">Cancel</button><button onClick={handleSave} disabled={saving} className="px-8 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">{saving ? 'Saving...' : <><Save className="size-5" />Save</>}</button></div>
           </div>

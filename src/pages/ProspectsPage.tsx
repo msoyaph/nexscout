@@ -48,6 +48,7 @@ export default function ProspectsPage({
 
   async function loadProspects() {
     try {
+      setLoading(true);
       const { data, error } = await supabase
         .from('prospects')
         .select('*')
@@ -56,6 +57,7 @@ export default function ProspectsPage({
 
       if (error) throw error;
 
+      // Format prospects first (show immediately)
       const formattedProspects = (data || []).map((p: any) => ({
         id: p.id,
         name: p.full_name,
@@ -72,13 +74,98 @@ export default function ProspectsPage({
         temperature: p.metadata?.bucket || p.metadata?.temperature || 'warm',
         platform: p.platform,
         pipeline_stage: p.pipeline_stage,
+        lastChatDate: null, // Will be populated async
       }));
 
       setProspects(formattedProspects);
+      setLoading(false);
+
+      // Load chat sessions in background (non-blocking)
+      if ((data || []).length > 0 && user?.id) {
+        loadChatSessionsAsync(data || []);
+      }
     } catch (error) {
       console.error('Error loading prospects:', error);
-    } finally {
       setLoading(false);
+    }
+  }
+
+  // Load chat sessions asynchronously without blocking UI
+  async function loadChatSessionsAsync(prospects: any[]) {
+    try {
+      const latestSessionsMap = new Map<string, any>();
+      
+      // Batch queries - get all sessions for prospects with IDs first
+      const prospectIds = prospects.map(p => p.id).filter(Boolean);
+      
+      if (prospectIds.length > 0 && user?.id) {
+        // Split into chunks to avoid URL length limits (max ~100 IDs per query)
+        const chunkSize = 50;
+        for (let i = 0; i < prospectIds.length; i += chunkSize) {
+          const chunk = prospectIds.slice(i, i + chunkSize);
+          
+          try {
+            const { data: sessionsById, error } = await supabase
+              .from('public_chat_sessions')
+              .select('prospect_id, updated_at, created_at')
+              .eq('user_id', user.id)
+              .in('prospect_id', chunk)
+              .order('updated_at', { ascending: false });
+
+            if (error) {
+              console.warn('Error loading sessions chunk:', error);
+              continue;
+            }
+
+            if (sessionsById) {
+              // Group by prospect_id and get latest for each
+              sessionsById.forEach((session: any) => {
+                if (session.prospect_id) {
+                  const existing = latestSessionsMap.get(session.prospect_id);
+                  if (!existing || new Date(session.updated_at || session.created_at) > new Date(existing.updated_at || existing.created_at)) {
+                    latestSessionsMap.set(session.prospect_id, session);
+                  }
+                }
+              });
+            }
+          } catch (chunkError) {
+            console.warn('Error loading sessions chunk:', chunkError);
+            // Continue with next chunk
+          }
+        }
+      }
+
+      // Update prospects with chat dates
+      setProspects(prev => prev.map(prospect => {
+        const session = latestSessionsMap.get(prospect.id);
+        const lastChatDate = session 
+          ? (session.updated_at || session.created_at)
+          : null;
+        
+        return {
+          ...prospect,
+          lastChatDate
+        };
+      }));
+    } catch (error) {
+      console.error('Error loading chat sessions (non-blocking):', error);
+      // Don't throw - this is background loading
+    }
+  }
+
+  function formatLastChatMessage(date: string | null): string {
+    if (!date) return 'No chat messages';
+    
+    const chatDate = new Date(date);
+    const now = new Date();
+    const isToday = chatDate.toDateString() === now.toDateString();
+    
+    if (isToday) {
+      // Today: show time only
+      return `Last Chat Message: ${chatDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+    } else {
+      // Not today: show date and time
+      return `Last Chat Message: ${chatDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} ${chatDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
     }
   }
 
@@ -284,7 +371,7 @@ export default function ProspectsPage({
                             <Star className="w-4 h-4 text-yellow-500 fill-yellow-500 flex-shrink-0" />
                           )}
                         </div>
-                        <p className="text-sm text-gray-500 truncate">{prospect.username}</p>
+                        <p className="text-xs text-gray-500 truncate">{formatLastChatMessage(prospect.lastChatDate)}</p>
                       </div>
 
                       <ProspectActionsMenu

@@ -461,6 +461,7 @@ export default function PublicChatPage({ slug, onNavigate }: PublicChatPageProps
   const sendGreeting = async (sessionId: string, settings: any) => {
     const greeting = settings.greeting_message || 'Hi! How can I help you today?';
 
+    // Send first greeting message
     const { error } = await supabase.from('public_chat_messages').insert({
       session_id: sessionId,
       sender: 'ai',
@@ -471,6 +472,34 @@ export default function PublicChatPage({ slug, onNavigate }: PublicChatPageProps
 
     if (!error) {
       await loadMessages(sessionId);
+      
+      // Send second greeting message after delay (if configured)
+      if (settings.second_greeting_message && settings.second_greeting_message.trim()) {
+        const delay = (settings.second_greeting_delay || 3) * 1000; // Convert to milliseconds
+        
+        setTimeout(async () => {
+          // Show typing indicator
+          setIsTyping(true);
+          
+          // Wait a bit to show typing animation
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          
+          // Send second greeting
+          const { error: secondError } = await supabase.from('public_chat_messages').insert({
+            session_id: sessionId,
+            sender: 'ai',
+            message: settings.second_greeting_message,
+            ai_emotion: 'welcoming',
+            ai_intent: 'greeting'
+          });
+          
+          setIsTyping(false);
+          
+          if (!secondError) {
+            await loadMessages(sessionId);
+          }
+        }, delay);
+      }
     }
   };
 

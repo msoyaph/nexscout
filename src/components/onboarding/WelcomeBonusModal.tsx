@@ -94,6 +94,7 @@ export function WelcomeBonusModal({ onClose }: WelcomeBonusModalProps) {
         localStorage.setItem(WELCOME_MODAL_STORAGE_KEY, 'true');
       }
       
+      // Refresh profile immediately to ensure state is updated
       await refreshProfile();
 
       // Auto-close after 2 seconds
@@ -118,6 +119,9 @@ export function WelcomeBonusModal({ onClose }: WelcomeBonusModalProps) {
       
       if (updateError) {
         console.error('[WelcomeBonus] Error marking bonus as dismissed in database:', updateError);
+      } else {
+        // Refresh profile immediately to ensure state is updated
+        await refreshProfile();
       }
     }
     
@@ -129,13 +133,27 @@ export function WelcomeBonusModal({ onClose }: WelcomeBonusModalProps) {
     onClose();
   };
 
+  // Handle backdrop click (clicking outside the modal)
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Only close if clicking the backdrop itself, not the modal content
+    if (e.target === e.currentTarget) {
+      handleClose();
+    }
+  };
+
   if (hasBeenDismissed()) {
     return null;
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden relative animate-scale-in">
+    <div 
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      onClick={handleBackdropClick}
+    >
+      <div 
+        className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden relative animate-scale-in"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Close Button */}
         <button
           onClick={handleClose}
@@ -146,18 +164,15 @@ export function WelcomeBonusModal({ onClose }: WelcomeBonusModalProps) {
         </button>
 
         {/* Header with Graphics */}
-        <div className="relative bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 p-8 text-center overflow-hidden">
+        <div className="relative bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 p-4 overflow-hidden">
           {/* Animated Background Elements */}
           <div className="absolute inset-0 opacity-20">
             <div className="absolute top-0 left-0 w-32 h-32 bg-white rounded-full blur-3xl animate-pulse" />
             <div className="absolute bottom-0 right-0 w-40 h-40 bg-yellow-300 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
           </div>
 
-          <div className="relative z-10">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full mb-4 animate-bounce">
-              <Gift className="w-10 h-10 text-white" />
-            </div>
-            <p className="text-white/90 text-sm">Your AI sales assistant is ready</p>
+          <div className="relative z-10 flex items-center pr-12">
+            <p className="text-white font-semibold text-sm md:text-base">Congratulations, your AI sales assistant is ready!</p>
           </div>
         </div>
 

@@ -73,7 +73,44 @@ export class PublicChatbotEngine {
         // If override is enabled, use ONLY custom instructions
         if (this.chatbotSettings?.instructions_override_intelligence) {
           console.log('[PublicChatbot] Using custom instructions (override mode)');
-          return this.chatbotSettings.custom_system_instructions;
+          let prompt = this.chatbotSettings.custom_system_instructions;
+          
+          // Add products and files from attachments
+          const attachments = this.chatbotSettings?.integrations?.instructions_attachments || [];
+          if (attachments && attachments.length > 0) {
+            const products = attachments.filter((a: any) => a.type === 'product');
+            const files = attachments.filter((a: any) => 
+              (a.type === 'other' || a.type === 'pdf' || a.type === 'document') && 
+              (a.fileType === 'brochure' || a.fileType === 'pdf' || a.fileType === 'document')
+            );
+            
+            if (products.length > 0 || files.length > 0) {
+              prompt += '\n\n========================================\n';
+              if (products.length > 0) {
+                prompt += 'PRODUCTS & PRODUCT LINKS (Send when asked)\n';
+                prompt += '========================================\n';
+                prompt += 'IMPORTANT: When visitors ask about products, share the product information and link them to the product URL.\n\n';
+                products.forEach((p: any, i: number) => {
+                  prompt += `${i + 1}. PRODUCT: ${p.name || 'Unnamed Product'}\n`;
+                  if (p.description) prompt += `   Description: ${p.description}\n`;
+                  prompt += `   Link: ${p.productLink || p.url || 'No link available'}\n\n`;
+                });
+              }
+              
+              if (files.length > 0) {
+                prompt += '========================================\n';
+                prompt += 'DOWNLOADABLE FILES & DOCUMENTS (Send when asked)\n';
+                prompt += '========================================\n';
+                prompt += 'IMPORTANT: When visitors ask for brochures, catalogs, or company files, share the file link from below.\n\n';
+                files.forEach((f: any, i: number) => {
+                  prompt += `${i + 1}. ${(f.fileType || 'FILE').toUpperCase()}: ${f.displayName || f.name || 'Unnamed File'}\n`;
+                  prompt += `   URL: ${f.url}\n\n`;
+                });
+              }
+            }
+          }
+          
+          return prompt;
         }
 
         // Otherwise, combine workspace + custom instructions
@@ -83,7 +120,7 @@ export class PublicChatbotEngine {
           'web'
         );
 
-        return `${workspaceInstruction}
+        let combinedPrompt = `${workspaceInstruction}
 
 ========================================
 CUSTOM INSTRUCTIONS (HIGH PRIORITY)
@@ -92,6 +129,41 @@ CUSTOM INSTRUCTIONS (HIGH PRIORITY)
 ${this.chatbotSettings.custom_system_instructions}
 
 IMPORTANT: Follow the custom instructions above while maintaining the company context and safety rules.`;
+
+        // Add products and files from attachments
+        const attachments = this.chatbotSettings?.integrations?.instructions_attachments || [];
+        if (attachments && attachments.length > 0) {
+          const products = attachments.filter((a: any) => a.type === 'product');
+          const files = attachments.filter((a: any) => 
+            (a.type === 'other' || a.type === 'pdf' || a.type === 'document') && 
+            (a.fileType === 'brochure' || a.fileType === 'pdf' || a.fileType === 'document')
+          );
+          
+          if (products.length > 0 || files.length > 0) {
+            combinedPrompt += '\n\n========================================\n';
+            if (products.length > 0) {
+              combinedPrompt += 'PRODUCTS & PRODUCT LINKS\n';
+              combinedPrompt += '========================================\n';
+              products.forEach((p: any, i: number) => {
+                combinedPrompt += `${i + 1}. ${p.name || 'Unnamed Product'}\n`;
+                if (p.description) combinedPrompt += `   Description: ${p.description}\n`;
+                combinedPrompt += `   Link: ${p.productLink || p.url || ''}\n\n`;
+              });
+            }
+            
+            if (files.length > 0) {
+              combinedPrompt += '========================================\n';
+              combinedPrompt += 'DOWNLOADABLE FILES & DOCUMENTS\n';
+              combinedPrompt += '========================================\n';
+              files.forEach((f: any, i: number) => {
+                combinedPrompt += `${i + 1}. ${(f.fileType || 'FILE').toUpperCase()}: ${f.displayName || f.name || 'Unnamed File'}\n`;
+                combinedPrompt += `   URL: ${f.url}\n\n`;
+              });
+            }
+          }
+        }
+
+        return combinedPrompt;
       }
 
       // Default: Use workspace-based instruction builder
@@ -499,9 +571,43 @@ Be ${tone}, helpful, and responsive.`;
       // Build minimal context for products and conversation
       let contextInfo = '';
 
-      // Add product information if available
+      // Add products and files from attachments (NEW)
+      const attachments = this.chatbotSettings?.integrations?.instructions_attachments || [];
+      if (attachments && attachments.length > 0) {
+        // Extract products
+        const products = attachments.filter((a: any) => a.type === 'product');
+        if (products.length > 0) {
+          contextInfo += '\n\n========================================\n';
+          contextInfo += 'PRODUCTS & PRODUCT LINKS (Send when asked)\n';
+          contextInfo += '========================================\n';
+          contextInfo += 'IMPORTANT: When visitors ask about products, share the product information and link them to the product URL.\n\n';
+          products.forEach((p: any, i: number) => {
+            contextInfo += `${i + 1}. PRODUCT: ${p.name || 'Unnamed Product'}\n`;
+            if (p.description) contextInfo += `   Description: ${p.description}\n`;
+            contextInfo += `   Link: ${p.productLink || p.url || 'No link available'}\n\n`;
+          });
+        }
+
+        // Extract file links (brochures, documents)
+        const files = attachments.filter((a: any) => 
+          (a.type === 'other' || a.type === 'pdf' || a.type === 'document') && 
+          (a.fileType === 'brochure' || a.fileType === 'pdf' || a.fileType === 'document')
+        );
+        if (files.length > 0) {
+          contextInfo += '========================================\n';
+          contextInfo += 'DOWNLOADABLE FILES & DOCUMENTS (Send when asked)\n';
+          contextInfo += '========================================\n';
+          contextInfo += 'IMPORTANT: When visitors ask for brochures, catalogs, or company files, share the file link from below.\n\n';
+          files.forEach((f: any, i: number) => {
+            contextInfo += `${i + 1}. ${(f.fileType || 'FILE').toUpperCase()}: ${f.displayName || f.name || 'Unnamed File'}\n`;
+            contextInfo += `   URL: ${f.url}\n\n`;
+          });
+        }
+      }
+
+      // Add product information from database if available (fallback)
       if (this.productsData && this.productsData.length > 0) {
-        contextInfo += '\n\n=== AVAILABLE PRODUCTS ===\n';
+        contextInfo += '\n=== AVAILABLE PRODUCTS (Database) ===\n';
         this.productsData.forEach((p: any, i: number) => {
           contextInfo += `${i + 1}. ${p.name}`;
           if (p.price) contextInfo += ` - ₱${p.price}`;
@@ -928,21 +1034,119 @@ Lead Temperature: ${this.leadTemperatureModel.toUpperCase()} (Score: ${this.lead
     if (scoreIncrease > 0) {
       const { data: currentSession } = await supabase
         .from('public_chat_sessions')
-        .select('buying_intent_score, qualification_score')
+        .select('buying_intent_score, qualification_score, prospect_id, status')
         .eq('id', this.sessionId)
         .maybeSingle();
 
       if (currentSession) {
+        const newQualificationScore = Math.min(1, (currentSession.qualification_score || 0) + (scoreIncrease * 0.75));
+        
         await supabase
           .from('public_chat_sessions')
           .update({
             buying_intent_score: Math.min(1, (currentSession.buying_intent_score || 0) + scoreIncrease),
-            qualification_score: Math.min(1, (currentSession.qualification_score || 0) + (scoreIncrease * 0.75)),
+            qualification_score: newQualificationScore,
             emotional_state: this.detectEmotion(this.conversationHistory[this.conversationHistory.length - 2]?.message || ''),
             updated_at: new Date().toISOString()
           })
           .eq('id', this.sessionId);
+
+        // Check for auto-conversion if not already converted
+        if (!currentSession.prospect_id && currentSession.status !== 'converted') {
+          await this.checkAutoConversion(newQualificationScore);
+        }
       }
+    }
+  }
+
+  /**
+   * Check if session should be auto-converted based on qualification score threshold
+   */
+  private async checkAutoConversion(qualificationScore: number): Promise<void> {
+    try {
+      // Get chatbot settings for auto-conversion
+      const { data: settings } = await supabase
+        .from('chatbot_settings')
+        .select('auto_convert_to_prospect, auto_qualify_threshold')
+        .eq('user_id', this.userId)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (!settings) {
+        console.log('[PublicChatbot] No chatbot settings found for auto-conversion check');
+        return;
+      }
+
+      // Check if auto-convert is enabled
+      if (!settings.auto_convert_to_prospect) {
+        console.log('[PublicChatbot] Auto-convert to prospect is disabled');
+        return;
+      }
+
+      // Get threshold (default to 0.25 = 25% if not set)
+      const threshold = settings.auto_qualify_threshold ?? 0.25;
+
+      // Check if qualification score meets threshold
+      if (qualificationScore >= threshold) {
+        console.log(`[PublicChatbot] Qualification score ${qualificationScore} meets threshold ${threshold}, attempting auto-conversion`);
+        
+        // Get session to verify we have contact info
+        const { data: session } = await supabase
+          .from('public_chat_sessions')
+          .select('visitor_name, visitor_email, visitor_phone, prospect_id, status')
+          .eq('id', this.sessionId)
+          .maybeSingle();
+
+        if (!session) {
+          console.error('[PublicChatbot] Session not found for auto-conversion');
+          return;
+        }
+
+        // Verify not already converted
+        if (session.prospect_id || session.status === 'converted') {
+          console.log('[PublicChatbot] Session already converted, skipping');
+          return;
+        }
+
+        // Verify we have at least name or email/phone for conversion
+        if (!session.visitor_name && !session.visitor_email && !session.visitor_phone) {
+          console.log('[PublicChatbot] Insufficient contact info for auto-conversion');
+          return;
+        }
+
+        // Call RPC function to auto-qualify and convert
+        const { data: prospectId, error } = await supabase.rpc('auto_qualify_session', {
+          p_session_id: this.sessionId
+        });
+
+        if (error) {
+          console.error('[PublicChatbot] Error in auto_qualify_session RPC:', error);
+          return;
+        }
+
+        if (prospectId) {
+          console.log(`[PublicChatbot] ✅ Successfully auto-converted session to prospect: ${prospectId}`);
+          
+          // Optionally send notification
+          try {
+            await supabase.from('notifications').insert({
+              user_id: this.userId,
+              type: 'prospect_created',
+              title: 'New Prospect Created',
+              message: `A visitor has been automatically converted to a prospect from chat session.`,
+              data: { session_id: this.sessionId, prospect_id: prospectId, source: 'auto_conversion' }
+            });
+          } catch (notifError) {
+            console.error('[PublicChatbot] Failed to create notification:', notifError);
+          }
+        } else {
+          console.log('[PublicChatbot] Auto-qualify session returned null (not qualified)');
+        }
+      } else {
+        console.log(`[PublicChatbot] Qualification score ${qualificationScore} below threshold ${threshold}`);
+      }
+    } catch (error) {
+      console.error('[PublicChatbot] Error checking auto-conversion:', error);
     }
   }
 

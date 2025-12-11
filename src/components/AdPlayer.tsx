@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
-import { X, Play } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X, Play, Check, Star } from 'lucide-react';
+import { adContentService, type AdContent } from '../services/ads/adContentService';
 
 interface AdPlayerProps {
   onComplete: () => void;
@@ -26,20 +27,42 @@ export default function AdPlayer({ onComplete, onClose, reward }: AdPlayerProps)
   const [timeLeft, setTimeLeft] = useState(30); // 30 second ad
   const [isPlaying, setIsPlaying] = useState(false);
   const [canSkip, setCanSkip] = useState(false);
+  const hasCompletedRef = useRef(false); // Use ref to prevent double calls (persists across renders)
+  const [currentAd, setCurrentAd] = useState<AdContent | null>(null);
+
+  // Load random ad on mount or when ad player opens
+  useEffect(() => {
+    if (!currentAd) {
+      setCurrentAd(adContentService.getRandomAd());
+    }
+  }, [currentAd]);
+
+  // Reset ad and completion state when opening player
+  useEffect(() => {
+    if (!isPlaying) {
+      hasCompletedRef.current = false;
+      setTimeLeft(30);
+      setCanSkip(false);
+      // Load new random ad each time
+      setCurrentAd(adContentService.getRandomAd());
+    }
+  }, [isPlaying]);
 
   useEffect(() => {
-    if (!isPlaying) return;
+    if (!isPlaying || hasCompletedRef.current) return;
 
     const interval = setInterval(() => {
       setTimeLeft((prev) => {
-        if (prev <= 1) {
+        if (prev <= 1 && !hasCompletedRef.current) {
+          hasCompletedRef.current = true; // Mark as completed immediately
           clearInterval(interval);
-          handleAdComplete();
+          // Call onComplete once
+          onComplete();
           return 0;
         }
         
-        // Allow skip after 5 seconds
-        if (prev === 25) {
+        // Allow skip after 15 seconds (when timeLeft reaches 15)
+        if (prev <= 15 && !canSkip) {
           setCanSkip(true);
         }
         
@@ -48,45 +71,52 @@ export default function AdPlayer({ onComplete, onClose, reward }: AdPlayerProps)
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isPlaying]);
+  }, [isPlaying, onComplete]);
 
   const handleAdComplete = () => {
+    if (hasCompletedRef.current) return; // Guard against double calls
+    hasCompletedRef.current = true;
     onComplete();
   };
 
   const handleStart = () => {
     setIsPlaying(true);
+    hasCompletedRef.current = false; // Reset completion flag when starting new ad
   };
 
   const handleSkip = () => {
-    if (canSkip && timeLeft <= 0) {
+    if (canSkip && !hasCompletedRef.current) {
       handleAdComplete();
     }
   };
 
+  const isAdComplete = timeLeft === 0 || hasCompletedRef.current;
+
   return (
     <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
-      <div className="relative w-full max-w-2xl">
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute -top-12 right-0 text-white/80 hover:text-white p-2"
-        >
-          <X className="w-6 h-6" />
-        </button>
+      <div className="relative w-[90vw] h-[90vh] max-w-none">
+        {/* Close Button - Only show when ad is complete */}
+        {isAdComplete && (
+          <button
+            onClick={onClose}
+            className="absolute -top-12 right-0 text-white/80 hover:text-white p-2 z-10"
+          >
+            <X className="w-6 h-6" />
+          </button>
+        )}
 
         {/* Ad Container */}
-        <div className="bg-black rounded-2xl overflow-hidden shadow-2xl">
+        <div className="bg-black rounded-2xl overflow-hidden shadow-2xl h-full w-full flex flex-col">
           {!isPlaying ? (
             // Ad Preview
-            <div className="aspect-video bg-gradient-to-br from-blue-900 to-purple-900 flex flex-col items-center justify-center p-8 text-white">
+            <div className={`flex-1 bg-gradient-to-br ${currentAd?.backgroundColor || 'from-blue-900 to-purple-900'} flex flex-col items-center justify-center p-8 ${currentAd?.textColor || 'text-white'}`}>
               <div className="w-20 h-20 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center mb-6">
                 <Play className="w-10 h-10 text-white" />
               </div>
               
-              <h3 className="text-2xl font-bold mb-2">Watch Ad to Continue</h3>
+              <h3 className="text-2xl font-bold mb-2">Watch Ad to Earn Coins</h3>
               <p className="text-white/80 text-center mb-6">
-                Watch a 30-second ad and get rewarded!
+                Watch a 30-second ad about NexScout and get rewarded!
               </p>
               
               <div className="flex gap-4 mb-6">
@@ -112,41 +142,100 @@ export default function AdPlayer({ onComplete, onClose, reward }: AdPlayerProps)
               </button>
             </div>
           ) : (
-            // Ad Playing
-            <div className="aspect-video bg-black relative">
-              {/* TODO: Replace with actual ad integration */}
-              {/* For now, simulated ad */}
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800 text-white">
-                <div className="text-center mb-8">
-                  <div className="text-6xl font-bold mb-2">{timeLeft}</div>
-                  <div className="text-white/60">seconds remaining</div>
-                </div>
-                
-                {/* Simulated Ad Content */}
-                <div className="max-w-md text-center">
-                  <div className="text-xl font-bold mb-4">Advertisement</div>
-                  <div className="text-sm text-white/80">
-                    This is where the actual ad video would play.
-                    Integrate with Google AdMob, AdSense, or custom ad server.
+            // Ad Playing - Show actual ad content
+            <div className="flex-1 bg-black relative overflow-hidden">
+              {currentAd && (
+                <div className={`absolute inset-0 bg-gradient-to-br ${currentAd.backgroundColor} ${currentAd.textColor} flex flex-col items-center justify-center p-8`}>
+                  {/* Ad Content */}
+                  <div className="max-w-2xl w-full text-center space-y-4">
+                    {/* Ad Type Badge */}
+                    <div className="inline-block px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full text-xs font-semibold mb-2">
+                      {currentAd.title}
+                    </div>
+
+                    {/* Headline */}
+                    <h2 className="text-3xl md:text-4xl font-bold mb-2 leading-tight">
+                      {currentAd.headline}
+                    </h2>
+
+                    {/* Subheadline */}
+                    <p className="text-lg md:text-xl text-white/90 mb-6">
+                      {currentAd.subheadline}
+                    </p>
+
+                    {/* Features List (for features/chatbot/industries ads) */}
+                    {currentAd.features && currentAd.features.length > 0 && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6 max-w-xl mx-auto">
+                        {currentAd.features.slice(0, 4).map((feature, idx) => (
+                          <div key={idx} className="flex items-start gap-2 text-left bg-white/10 backdrop-blur-sm rounded-lg p-3">
+                            <Check className="w-5 h-5 text-green-300 flex-shrink-0 mt-0.5" />
+                            <span className="text-sm font-medium">{feature}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Testimonial (for testimonials ad) */}
+                    {currentAd.testimonial && (
+                      <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 mb-6 max-w-xl mx-auto">
+                        <div className="flex items-center gap-1 mb-3 justify-center">
+                          {[...Array(5)].map((_, i) => (
+                            <Star key={i} className="w-4 h-4 fill-yellow-300 text-yellow-300" />
+                          ))}
+                        </div>
+                        <p className="text-lg italic mb-4">"{currentAd.testimonial.quote}"</p>
+                        <div className="flex items-center justify-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center font-bold">
+                            {currentAd.testimonial.name.charAt(0)}
+                          </div>
+                          <div className="text-left">
+                            <p className="font-semibold">{currentAd.testimonial.name}</p>
+                            <p className="text-sm text-white/70">{currentAd.testimonial.role}</p>
+                          </div>
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-white/20">
+                          <p className="text-sm font-semibold text-green-300">
+                            ✓ {currentAd.testimonial.result}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* FOMO Elements (for fomo ad) */}
+                    {currentAd.type === 'fomo' && (
+                      <div className="bg-red-500/20 border-2 border-red-400 rounded-xl p-4 mb-6 max-w-xl mx-auto animate-pulse">
+                        <p className="text-sm font-bold">⚡ Limited Time Offer - Ends Soon!</p>
+                      </div>
+                    )}
+
+                    {/* CTA Button */}
+                    <button className="px-8 py-4 bg-white text-gray-900 rounded-xl font-bold text-lg hover:bg-gray-100 transition-colors shadow-xl">
+                      {currentAd.cta}
+                    </button>
+
+                    {/* App Name */}
+                    <p className="text-sm text-white/60 mt-4">
+                      Powered by <span className="font-semibold">NexScout</span>
+                    </p>
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* Ad Controls */}
+              {/* Timer Overlay */}
               <div className="absolute top-4 right-4">
                 <div className="bg-black/60 backdrop-blur-sm px-3 py-1 rounded-full text-white text-sm font-semibold">
-                  Ad {30 - timeLeft}/30
+                  {timeLeft}s
                 </div>
               </div>
 
-              {/* Skip Button (after 5 seconds) */}
-              {canSkip && timeLeft === 0 && (
+              {/* Skip Button (appears after 5 seconds) */}
+              {canSkip && timeLeft > 0 && (
                 <div className="absolute bottom-4 right-4">
                   <button
                     onClick={handleSkip}
-                    className="px-4 py-2 bg-white text-black rounded-lg font-semibold hover:bg-gray-100 transition-colors"
+                    className="px-4 py-2 bg-white/90 text-gray-900 rounded-lg font-semibold hover:bg-white transition-colors shadow-lg"
                   >
-                    Continue →
+                    Skip Ad ({timeLeft}s left)
                   </button>
                 </div>
               )}

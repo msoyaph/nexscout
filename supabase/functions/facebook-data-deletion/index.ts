@@ -10,7 +10,7 @@
  * Reference: https://developers.facebook.com/docs/development/create-an-app/app-dashboard/data-deletion-callback
  */
 
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
@@ -224,10 +224,37 @@ async function deleteUserData(
   }
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   // Handle CORS
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // Handle GET requests (Facebook validation)
+  if (req.method === 'GET') {
+    return new Response(
+      JSON.stringify({ 
+        message: 'Facebook Data Deletion Callback endpoint is active',
+        status: 'ok'
+      }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  }
+  // Handle GET requests (Facebook validation)
+  if (req.method === 'GET') {
+    return new Response(
+      JSON.stringify({ 
+        message: 'Facebook Data Deletion Callback endpoint is active',
+        status: 'ok'
+      }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
   }
 
   if (req.method !== 'POST') {
