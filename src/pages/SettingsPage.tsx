@@ -156,11 +156,33 @@ export default function SettingsPage({ onBack, onNavigate }: SettingsPageProps) 
   };
 
   const handleFacebookConnect = () => {
-    const fbAppId = import.meta.env.VITE_FACEBOOK_APP_ID || 'YOUR_FB_APP_ID';
-    const redirectUri = `${window.location.origin}/api/facebook/callback`;
+    const fbAppId = import.meta.env.VITE_FACEBOOK_APP_ID;
+    if (!fbAppId) {
+      alert('Facebook App ID is not configured. Please contact support.');
+      return;
+    }
+
+    // Use Edge Function URL as redirect URI (not frontend route)
+    // Normalize URL to ensure HTTPS and no double slashes
+    let supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+    // Ensure HTTPS
+    if (supabaseUrl.startsWith('http://')) {
+      supabaseUrl = supabaseUrl.replace('http://', 'https://');
+    } else if (!supabaseUrl.startsWith('https://')) {
+      supabaseUrl = `https://${supabaseUrl}`;
+    }
+    // Remove trailing slash to prevent double slashes
+    supabaseUrl = supabaseUrl.replace(/\/+$/, '');
+    const redirectUri = `${supabaseUrl}/functions/v1/facebook-oauth-callback`;
     const scopes = 'pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement';
     
-    const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes}&state=${user?.id}`;
+    const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes}&state=${user?.id || ''}`;
+    
+    console.log('[Facebook OAuth] Starting OAuth flow:', {
+      appId: fbAppId,
+      redirectUri,
+      userId: user?.id
+    });
     
     window.location.href = authUrl;
   };
